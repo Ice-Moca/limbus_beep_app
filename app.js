@@ -370,7 +370,7 @@ class PagerApp {
       return;
     }
 
-    const clientId = this.config.google_client_id || "62267119906-vmtpf5lna011f2jo8a6djamllb13c7io.apps.googleusercontent.com";
+    const clientId = this.config.google_client_id || "801016649024-hauetgafmiv9jlcelj8a0hbv0of05hok.apps.googleusercontent.com";
 
     // 1. Google Identity Services (GIS) Token Client 시도 (구글 공식 권장)
     if (window.google && window.google.accounts && window.google.accounts.oauth2) {
