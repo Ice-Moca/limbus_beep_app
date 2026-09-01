@@ -328,19 +328,50 @@ html, body {
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
 }
 
-.theme-mini-preview::after {
-  content: "";
+.mini-crt-scanlines {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%);
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.45) 50%);
   background-size: 100% 3px;
   pointer-events: none;
+  z-index: 2;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.mini-crt-scanlines.hidden {
+  opacity: 0 !important;
+}
+
+.mini-crt-vignette {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(circle at center, transparent 35%, rgba(0, 0, 0, 0.85) 100%);
+  pointer-events: none;
+  z-index: 3;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.mini-crt-vignette.hidden {
+  opacity: 0 !important;
 }
 
 .mini-screen-decor {
   display: flex;
   align-items: center;
   gap: 6px;
+  position: relative;
+  z-index: 4;
+}
+
+.mini-screen-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  position: relative;
+  z-index: 4;
 }
 
 .mini-decor-dot {

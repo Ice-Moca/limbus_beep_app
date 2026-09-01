@@ -117,6 +117,9 @@ class PagerApp {
       // 설정 필드
       selectOrientation: document.getElementById('select-orientation'),
       inputIcsUrl: document.getElementById('input-ics-url'),
+      inputIcsFile: document.getElementById('input-ics-file'),
+      btnUploadIcsFile: document.getElementById('btn-upload-ics-file'),
+      btnPasteIcsText: document.getElementById('btn-paste-ics-text'),
       selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
       selectSoundType: document.getElementById('select-sound-type'),
@@ -261,17 +264,64 @@ class PagerApp {
       this.applyOrientation(e.target.value);
     });
 
-    // 10. 설정 저장 및 기본값 복원
+    // 10. CRT 스캔라인 & 비네팅 토글 시 실시간 미니 프리뷰 업데이트
+    if (this.dom.toggleScanlines) {
+      this.dom.toggleScanlines.addEventListener('change', () => this.updateMiniCrtPreview());
+    }
+    if (this.dom.toggleVignette) {
+      this.dom.toggleVignette.addEventListener('change', () => this.updateMiniCrtPreview());
+    }
+
+    // 11. 설정 저장 및 기본값 복원
     this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
     this.dom.btnResetDefault.addEventListener('click', () => this.resetDefaults());
 
-    // 11. 캘린더 즉시 동기화
+    // 12. 캘린더 URL 즉시 동기화
     this.dom.btnSyncNow.addEventListener('click', () => {
       const url = this.dom.inputIcsUrl.value.trim();
       this.syncCalendar(url);
     });
 
-    // 12. 메시지 에디터 툴바
+    // 13. ICS 파일 직접 업로드
+    if (this.dom.btnUploadIcsFile && this.dom.inputIcsFile) {
+      this.dom.btnUploadIcsFile.addEventListener('click', () => {
+        this.dom.inputIcsFile.click();
+      });
+      this.dom.inputIcsFile.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const content = evt.target.result;
+            this.importIcsText(content, `파일 (${file.name})`);
+          };
+          reader.readAsText(file);
+        }
+        e.target.value = '';
+      });
+    }
+
+    // 14. ICS 텍스트 직접 붙여넣기
+    if (this.dom.btnPasteIcsText) {
+      this.dom.btnPasteIcsText.addEventListener('click', async () => {
+        let text = '';
+        try {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            text = await navigator.clipboard.readText();
+          }
+        } catch (clipErr) {}
+
+        if (!text || !text.includes('BEGIN:VCALENDAR')) {
+          text = prompt("구글 캘린더나 .ics 파일의 내용을 직접 붙여넣어주세요 (BEGIN:VCALENDAR ...):", text || "");
+        }
+
+        if (text && text.trim()) {
+          this.importIcsText(text, "텍스트 직접 등록");
+        }
+      });
+    }
+
+    // 15. 메시지 에디터 툴바
     this.dom.btnLoadSample.addEventListener('click', () => {
       this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
       this.renderCustomStageCards();
@@ -284,7 +334,7 @@ class PagerApp {
       this.showToast("메시지 입력란을 초기화했습니다.");
     });
 
-    // 13. 작성된 STAGE 삐삐 적용
+    // 16. 작성된 STAGE 삐삐 적용
     this.dom.btnApplyCustom.addEventListener('click', () => this.applyCustomStages());
   }
 
@@ -367,6 +417,39 @@ class PagerApp {
     });
     if (this.dom.btnOpenColorPickerBg) {
       this.dom.btnOpenColorPickerBg.classList.toggle('active', !bgPresetMatched);
+    }
+
+    this.updateMiniCrtPreview();
+  }
+
+  updateMiniCrtPreview() {
+    const miniScan = document.getElementById('mini-crt-scanlines');
+    const miniVig = document.getElementById('mini-crt-vignette');
+    const isScanOn = this.dom.toggleScanlines ? this.dom.toggleScanlines.checked : this.config.scanlines;
+    const isVigOn = this.dom.toggleVignette ? this.dom.toggleVignette.checked : (this.config.vignette !== false);
+
+    if (miniScan) miniScan.classList.toggle('hidden', !isScanOn);
+    if (miniVig) miniVig.classList.toggle('hidden', !isVigOn);
+  }
+
+  importIcsText(icsText, sourceLabel = "ICS") {
+    if (!icsText || !icsText.includes("BEGIN:VCALENDAR")) {
+      alert("올바른 iCal/ICS 형식이 아닙니다. (BEGIN:VCALENDAR 로 시작하는 텍스트나 파일이어야 합니다.)");
+      return;
+    }
+
+    try {
+      const events = this.parseIcsText(icsText);
+      const stages = this.distributeEventsTo3Stages(events.map(e => this.formatEvent(e)));
+      this.saveStoredMessages(stages);
+
+      if (events.length > 0) {
+        this.showToast(`${sourceLabel}에서 오늘 일정 ${events.length}개를 가져왔습니다.`);
+      } else {
+        this.showToast(`동기화 완료: 오늘(KST) 등록된 일정이 없습니다 (0건).`);
+      }
+    } catch (err) {
+      alert(`ICS 파싱 실패: ${err.message}`);
     }
   }
 
@@ -949,7 +1032,11 @@ class PagerApp {
       this.saveConfig(this.config);
 
       if (!isSilent) {
-        this.showToast(`오늘 일정 ${events.length}개를 성공적으로 가져왔습니다.`);
+        if (events.length > 0) {
+          this.showToast(`오늘 일정 ${events.length}개를 성공적으로 가져왔습니다.`);
+        } else {
+          this.showToast("동기화 완료: 오늘(KST) 등록된 일정이 없습니다 (0건).");
+        }
         if (this.dom.btnSyncNow) {
           this.dom.btnSyncNow.textContent = "동기화";
           this.dom.btnSyncNow.disabled = false;
