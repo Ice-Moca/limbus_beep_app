@@ -265,16 +265,30 @@ class PagerApp {
   loadStoredMessages() {
     try {
       const stored = localStorage.getItem('limbus_beep_messages');
-      return stored ? JSON.parse(stored) : DEFAULT_MESSAGES;
+      const list = stored ? JSON.parse(stored) : DEFAULT_MESSAGES;
+      return list.map(stage => ({
+        ...stage,
+        messages: (stage.messages || []).map(m => ({
+          ...m,
+          text: (m.text || "").replace(/\s*_CLEAR\._|\s*_CLEAR_/g, '').trim()
+        }))
+      }));
     } catch {
       return DEFAULT_MESSAGES;
     }
   }
 
   saveStoredMessages(messages) {
-    this.messages = messages;
-    this.customStages = JSON.parse(JSON.stringify(messages));
-    localStorage.setItem('limbus_beep_messages', JSON.stringify(messages));
+    const cleaned = messages.map(stage => ({
+      ...stage,
+      messages: (stage.messages || []).map(m => ({
+        ...m,
+        text: (m.text || "").replace(/\s*_CLEAR\._|\s*_CLEAR_/g, '').trim()
+      }))
+    }));
+    this.messages = cleaned;
+    this.customStages = JSON.parse(JSON.stringify(cleaned));
+    localStorage.setItem('limbus_beep_messages', JSON.stringify(cleaned));
     this.currentStageIdx = 0;
     this.currentMsgIdx = 0;
     this.updateDisplay();
