@@ -247,11 +247,10 @@
                 </button>
                 
                 <!-- 커스텀 컬러 피커 버튼 -->
-                <label class="palette-custom-btn" title="사용자 지정 색상">
-                  <input type="color" id="picker-font-color" value="#2fbffc" class="hidden-color-input">
+                <button type="button" class="palette-custom-btn" id="btn-open-color-picker-font" title="사용자 지정 글자 색상">
                   <span class="custom-icon">🎨</span>
                   <span class="custom-label">직접 선택</span>
-                </label>
+                </button>
               </div>
             </div>
 
@@ -284,11 +283,10 @@
                 </button>
 
                 <!-- 커스텀 컬러 피커 버튼 -->
-                <label class="palette-custom-btn" title="사용자 지정 색상">
-                  <input type="color" id="picker-bg-color" value="#000000" class="hidden-color-input">
+                <button type="button" class="palette-custom-btn" id="btn-open-color-picker-bg" title="사용자 지정 배경 색상">
                   <span class="custom-icon">🎨</span>
                   <span class="custom-label">직접 선택</span>
-                </label>
+                </button>
               </div>
             </div>
 
@@ -333,6 +331,66 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ── 프리미엄 사이버펑크 색상 선택 팝업 다이얼로그 ── -->
+  <div id="custom-color-modal" class="modal-overlay hidden" style="z-index: 1200;">
+    <div class="cyber-color-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-title">
+            <span id="color-modal-title">🎨 사용자 지정 색상</span>
+          </div>
+        </div>
+        <button id="btn-close-color-modal" class="close-btn">&times;</button>
+      </div>
+
+      <div class="cyber-color-body">
+        <!-- 2D 채도/명도 캔버스 & HUE 레인보우 바 -->
+        <div class="picker-interactive-box">
+          <div id="picker-sv-box" class="picker-sv-box">
+            <div class="sv-white-layer"></div>
+            <div class="sv-black-layer"></div>
+            <div id="picker-sv-cursor" class="picker-sv-cursor"></div>
+          </div>
+          <div id="picker-hue-track" class="picker-hue-track">
+            <div id="picker-hue-thumb" class="picker-hue-thumb"></div>
+          </div>
+        </div>
+
+        <!-- 컬러 비교 박스 & HEX/RGB 세밀 입력창 -->
+        <div class="picker-values-row">
+          <div class="picker-swatch-compare">
+            <div class="swatch-label">NEW COLOR</div>
+            <div id="picker-live-swatch" class="picker-live-swatch"></div>
+          </div>
+          <div class="picker-inputs-column">
+            <div class="picker-hex-row">
+              <span class="picker-input-tag">HEX</span>
+              <input type="text" id="picker-hex-input" class="cyber-hex-field" value="#2FBFFC" maxlength="7" spellcheck="false">
+            </div>
+            <div class="picker-rgb-row">
+              <div class="rgb-col"><span class="rgb-tag">R</span><input type="number" id="picker-r-input" min="0" max="255" class="rgb-num-field" value="47"></div>
+              <div class="rgb-col"><span class="rgb-tag">G</span><input type="number" id="picker-g-input" min="0" max="255" class="rgb-num-field" value="191"></div>
+              <div class="rgb-col"><span class="rgb-tag">B</span><input type="number" id="picker-b-input" min="0" max="255" class="rgb-num-field" value="252"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 추천 사이버 네온 프리셋 그리드 -->
+        <div class="quick-preset-container">
+          <div class="quick-preset-title">QUICK CYBER PRESETS</div>
+          <div class="quick-preset-grid" id="quick-preset-grid">
+            <!-- JS 동적 생성 -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-cancel-color-modal" class="btn btn-secondary">취소</button>
+        <button id="btn-apply-color-modal" class="btn btn-primary">선택 완료</button>
+      </div>
     </div>
   </div>
 

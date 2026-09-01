@@ -66,6 +66,7 @@ class PagerApp {
     this.audioCtx = null;
     
     this.initDOM();
+    this.initCustomColorPicker();
     this.bindEvents();
     this.applySettings();
     this.startClock();
@@ -119,12 +120,29 @@ class PagerApp {
       selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
       selectSoundType: document.getElementById('select-sound-type'),
-      pickerFontColor: document.getElementById('picker-font-color'),
-      pickerBgColor: document.getElementById('picker-bg-color'),
       sliderVolume: document.getElementById('slider-volume'),
       labelVolume: document.getElementById('label-volume'),
       toggleScanlines: document.getElementById('toggle-scanlines'),
       toggleVignette: document.getElementById('toggle-vignette'),
+
+      // 커스텀 사이버 컬러 모달
+      colorModal: document.getElementById('custom-color-modal'),
+      colorModalTitle: document.getElementById('color-modal-title'),
+      btnCloseColorModal: document.getElementById('btn-close-color-modal'),
+      btnCancelColorModal: document.getElementById('btn-cancel-color-modal'),
+      btnApplyColorModal: document.getElementById('btn-apply-color-modal'),
+      btnOpenColorPickerFont: document.getElementById('btn-open-color-picker-font'),
+      btnOpenColorPickerBg: document.getElementById('btn-open-color-picker-bg'),
+      pickerSvBox: document.getElementById('picker-sv-box'),
+      pickerSvCursor: document.getElementById('picker-sv-cursor'),
+      pickerHueTrack: document.getElementById('picker-hue-track'),
+      pickerHueThumb: document.getElementById('picker-hue-thumb'),
+      pickerLiveSwatch: document.getElementById('picker-live-swatch'),
+      pickerHexInput: document.getElementById('picker-hex-input'),
+      pickerRInput: document.getElementById('picker-r-input'),
+      pickerGInput: document.getElementById('picker-g-input'),
+      pickerBInput: document.getElementById('picker-b-input'),
+      quickPresetGrid: document.getElementById('quick-preset-grid'),
       
       audio: document.getElementById('beep-audio'),
       toast: document.getElementById('toast'),
@@ -217,24 +235,24 @@ class PagerApp {
         const type = e.currentTarget.dataset.type;
         const color = e.currentTarget.dataset.color;
         if (type === 'font') {
-          if (this.dom.pickerFontColor) this.dom.pickerFontColor.value = color;
-          this.applyCustomColors(color, this.dom.pickerBgColor ? this.dom.pickerBgColor.value : '#000000');
+          this.config.font_color = color;
+          this.applyCustomColors(color, this.config.bg_color || '#000000');
         } else if (type === 'bg') {
-          if (this.dom.pickerBgColor) this.dom.pickerBgColor.value = color;
-          this.applyCustomColors(this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2FBFFC', color);
+          this.config.bg_color = color;
+          this.applyCustomColors(this.config.font_color || '#2FBFFC', color);
         }
       });
     });
 
-    // 8. 컬러 피커 직접 선택 실시간 반영
-    if (this.dom.pickerFontColor) {
-      this.dom.pickerFontColor.addEventListener('input', (e) => {
-        this.applyCustomColors(e.target.value, this.dom.pickerBgColor ? this.dom.pickerBgColor.value : '#000000');
+    // 8. 프리미엄 사이버 컬러 모달 열기 버튼
+    if (this.dom.btnOpenColorPickerFont) {
+      this.dom.btnOpenColorPickerFont.addEventListener('click', () => {
+        this.openCustomColorModal('font');
       });
     }
-    if (this.dom.pickerBgColor) {
-      this.dom.pickerBgColor.addEventListener('input', (e) => {
-        this.applyCustomColors(this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2FBFFC', e.target.value);
+    if (this.dom.btnOpenColorPickerBg) {
+      this.dom.btnOpenColorPickerBg.addEventListener('click', () => {
+        this.openCustomColorModal('bg');
       });
     }
 
@@ -965,6 +983,290 @@ class PagerApp {
       idx += count;
     }
     return stages;
+  }
+
+  // ── 프리미엄 사이버 컬러 피커 시스템 ──
+  initCustomColorPicker() {
+    this.colorPickerTarget = 'font';
+    this.currentColorH = 198;
+    this.currentColorS = 81;
+    this.currentColorV = 99;
+    this.currentColorHex = '#2FBFFC';
+
+    // 1. 2D 채도/명도 캔버스 인터랙션
+    let isDraggingSV = false;
+    const handleSVMove = (e) => {
+      if (!this.dom.pickerSvBox) return;
+      const rect = this.dom.pickerSvBox.getBoundingClientRect();
+      const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+      const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+      const s = Math.round(x * 100);
+      const v = Math.round((1 - y) * 100);
+      this.updateColorFromHSV(this.currentColorH, s, v);
+    };
+
+    if (this.dom.pickerSvBox) {
+      this.dom.pickerSvBox.addEventListener('pointerdown', (e) => {
+        isDraggingSV = true;
+        this.dom.pickerSvBox.setPointerCapture(e.pointerId);
+        handleSVMove(e);
+      });
+      this.dom.pickerSvBox.addEventListener('pointermove', (e) => {
+        if (isDraggingSV) handleSVMove(e);
+      });
+      this.dom.pickerSvBox.addEventListener('pointerup', (e) => {
+        if (isDraggingSV) {
+          isDraggingSV = false;
+          try { this.dom.pickerSvBox.releasePointerCapture(e.pointerId); } catch(err) {}
+        }
+      });
+      this.dom.pickerSvBox.addEventListener('pointercancel', () => {
+        isDraggingSV = false;
+      });
+    }
+
+    // 2. 1D HUE 바 인터랙션
+    let isDraggingHue = false;
+    const handleHueMove = (e) => {
+      if (!this.dom.pickerHueTrack) return;
+      const rect = this.dom.pickerHueTrack.getBoundingClientRect();
+      const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const h = Math.round(x * 360) % 360;
+      this.updateColorFromHSV(h, this.currentColorS, this.currentColorV);
+    };
+
+    if (this.dom.pickerHueTrack) {
+      this.dom.pickerHueTrack.addEventListener('pointerdown', (e) => {
+        isDraggingHue = true;
+        this.dom.pickerHueTrack.setPointerCapture(e.pointerId);
+        handleHueMove(e);
+      });
+      this.dom.pickerHueTrack.addEventListener('pointermove', (e) => {
+        if (isDraggingHue) handleHueMove(e);
+      });
+      this.dom.pickerHueTrack.addEventListener('pointerup', (e) => {
+        if (isDraggingHue) {
+          isDraggingHue = false;
+          try { this.dom.pickerHueTrack.releasePointerCapture(e.pointerId); } catch(err) {}
+        }
+      });
+      this.dom.pickerHueTrack.addEventListener('pointercancel', () => {
+        isDraggingHue = false;
+      });
+    }
+
+    // 3. HEX 텍스트 인풋
+    if (this.dom.pickerHexInput) {
+      this.dom.pickerHexInput.addEventListener('input', (e) => {
+        let val = e.target.value.trim();
+        if (!val.startsWith('#')) val = '#' + val;
+        if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+          this.updateColorFromHex(val);
+        }
+      });
+    }
+
+    // 4. RGB 숫자 인풋
+    const handleRgbChange = () => {
+      const r = parseInt(this.dom.pickerRInput.value, 10) || 0;
+      const g = parseInt(this.dom.pickerGInput.value, 10) || 0;
+      const b = parseInt(this.dom.pickerBInput.value, 10) || 0;
+      this.updateColorFromRgb(r, g, b);
+    };
+
+    if (this.dom.pickerRInput) this.dom.pickerRInput.addEventListener('input', handleRgbChange);
+    if (this.dom.pickerGInput) this.dom.pickerGInput.addEventListener('input', handleRgbChange);
+    if (this.dom.pickerBInput) this.dom.pickerBInput.addEventListener('input', handleRgbChange);
+
+    // 5. 모달 버튼 액션
+    if (this.dom.btnCloseColorModal) {
+      this.dom.btnCloseColorModal.addEventListener('click', () => this.closeCustomColorModal());
+    }
+    if (this.dom.btnCancelColorModal) {
+      this.dom.btnCancelColorModal.addEventListener('click', () => this.closeCustomColorModal());
+    }
+    if (this.dom.btnApplyColorModal) {
+      this.dom.btnApplyColorModal.addEventListener('click', () => this.applyChosenCustomColor());
+    }
+    if (this.dom.colorModal) {
+      this.dom.colorModal.addEventListener('click', (e) => {
+        if (e.target === this.dom.colorModal) this.closeCustomColorModal();
+      });
+    }
+  }
+
+  openCustomColorModal(target = 'font') {
+    this.colorPickerTarget = target;
+    if (this.dom.colorModalTitle) {
+      this.dom.colorModalTitle.textContent = target === 'font' ? '🎨 글자 색상 사용자 지정' : '🎨 배경 색상 사용자 지정';
+    }
+
+    const currentHex = target === 'font' ? (this.config.font_color || '#2FBFFC') : (this.config.bg_color || '#000000');
+    this.updateColorFromHex(currentHex);
+    this.renderQuickPresets();
+
+    if (this.dom.colorModal) this.dom.colorModal.classList.remove('hidden');
+  }
+
+  closeCustomColorModal() {
+    if (this.dom.colorModal) this.dom.colorModal.classList.add('hidden');
+  }
+
+  updateColorFromHSV(h, s, v) {
+    this.currentColorH = Math.max(0, Math.min(360, h));
+    this.currentColorS = Math.max(0, Math.min(100, s));
+    this.currentColorV = Math.max(0, Math.min(100, v));
+
+    const rgb = this.hsvToRgb(this.currentColorH, this.currentColorS, this.currentColorV);
+    const hex = this.rgbToHex(rgb.r, rgb.g, rgb.b);
+    this.currentColorHex = hex;
+
+    // 1. SV 박스 틴트 & 커서 위치
+    if (this.dom.pickerSvBox) {
+      this.dom.pickerSvBox.style.backgroundColor = `hsl(${this.currentColorH}, 100%, 50%)`;
+    }
+    if (this.dom.pickerSvCursor) {
+      this.dom.pickerSvCursor.style.left = `${this.currentColorS}%`;
+      this.dom.pickerSvCursor.style.top = `${100 - this.currentColorV}%`;
+    }
+
+    // 2. Hue 썸 위치
+    if (this.dom.pickerHueThumb) {
+      this.dom.pickerHueThumb.style.left = `${(this.currentColorH / 360) * 100}%`;
+    }
+
+    // 3. 라이브 스와치 & 발광
+    if (this.dom.pickerLiveSwatch) {
+      this.dom.pickerLiveSwatch.style.backgroundColor = hex;
+      this.dom.pickerLiveSwatch.style.borderColor = hex;
+      this.dom.pickerLiveSwatch.style.boxShadow = `0 0 14px ${hex}99`;
+    }
+
+    // 4. 인풋 필드 동기화 (포커스 중이 아닐 때만)
+    if (this.dom.pickerHexInput && document.activeElement !== this.dom.pickerHexInput) {
+      this.dom.pickerHexInput.value = hex;
+    }
+    if (this.dom.pickerRInput && document.activeElement !== this.dom.pickerRInput) this.dom.pickerRInput.value = rgb.r;
+    if (this.dom.pickerGInput && document.activeElement !== this.dom.pickerGInput) this.dom.pickerGInput.value = rgb.g;
+    if (this.dom.pickerBInput && document.activeElement !== this.dom.pickerBInput) this.dom.pickerBInput.value = rgb.b;
+
+    // 5. 퀵 프리셋 칩 활성화 표시
+    document.querySelectorAll('.quick-preset-chip').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.color.toUpperCase() === hex);
+    });
+  }
+
+  updateColorFromHex(hex) {
+    const rgb = this.hexToRgb(hex);
+    if (!rgb) return;
+    const hsv = this.rgbToHsv(rgb.r, rgb.g, rgb.b);
+    this.updateColorFromHSV(hsv.h, hsv.s, hsv.v);
+  }
+
+  updateColorFromRgb(r, g, b) {
+    const hsv = this.rgbToHsv(r, g, b);
+    this.updateColorFromHSV(hsv.h, hsv.s, hsv.v);
+  }
+
+  renderQuickPresets() {
+    if (!this.dom.quickPresetGrid) return;
+    this.dom.quickPresetGrid.innerHTML = '';
+
+    const presets = [
+      "#2FBFFC", "#00E5FF", "#38C5FF", "#5CD0FF",
+      "#00E676", "#69F0AE", "#B2FF59", "#76FF03",
+      "#FF9D00", "#FFC107", "#FFD600", "#FFAB00",
+      "#FF5252", "#FF1744", "#F50057", "#D500F9",
+      "#7C4DFF", "#651FFF", "#3D5AFE", "#2979FF",
+      "#FFFFFF", "#B0BEC5", "#050E18", "#000000"
+    ];
+
+    presets.forEach(color => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'quick-preset-chip';
+      chip.dataset.color = color;
+      chip.style.backgroundColor = color;
+      chip.style.color = color;
+      chip.title = color;
+      if (color.toUpperCase() === this.currentColorHex) {
+        chip.classList.add('active');
+      }
+      chip.addEventListener('click', () => {
+        this.updateColorFromHex(color);
+      });
+      this.dom.quickPresetGrid.appendChild(chip);
+    });
+  }
+
+  applyChosenCustomColor() {
+    const chosen = this.currentColorHex;
+    if (this.colorPickerTarget === 'font') {
+      this.config.font_color = chosen;
+      this.applyCustomColors(chosen, this.config.bg_color || '#000000');
+    } else {
+      this.config.bg_color = chosen;
+      this.applyCustomColors(this.config.font_color || '#2FBFFC', chosen);
+    }
+    this.closeCustomColorModal();
+    this.showToast(`색상이 적용되었습니다: ${chosen}`);
+  }
+
+  // ── 색상 변환 헬퍼 함수 ──
+  hsvToRgb(h, s, v) {
+    s /= 100;
+    v /= 100;
+    const c = v * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = v - c;
+    let r = 0, g = 0, b = 0;
+    if (h >= 0 && h < 60) { r = c; g = x; b = 0; }
+    else if (h >= 60 && h < 120) { r = x; g = c; b = 0; }
+    else if (h >= 120 && h < 180) { r = 0; g = c; b = x; }
+    else if (h >= 180 && h < 240) { r = 0; g = x; b = c; }
+    else if (h >= 240 && h < 300) { r = x; g = 0; b = c; }
+    else if (h >= 300 && h < 360) { r = c; g = 0; b = x; }
+    return {
+      r: Math.round((r + m) * 255),
+      g: Math.round((g + m) * 255),
+      b: Math.round((b + m) * 255)
+    };
+  }
+
+  rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0, s = max === 0 ? 0 : d / max, v = max;
+    if (max !== min) {
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h *= 60;
+    }
+    return { h: Math.round(h), s: Math.round(s * 100), v: Math.round(v * 100) };
+  }
+
+  rgbToHex(r, g, b) {
+    const toHex = (n) => {
+      const hex = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    };
+    return ('#' + toHex(r) + toHex(g) + toHex(b)).toUpperCase();
+  }
+
+  hexToRgb(hex) {
+    let c = hex.replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    if (c.length !== 6) return null;
+    const num = parseInt(c, 16);
+    if (isNaN(num)) return null;
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
   }
 
   // ── 토스트 알림 ──
