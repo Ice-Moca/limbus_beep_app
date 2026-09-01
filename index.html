@@ -35,7 +35,7 @@
       </div>
       <div class="header-right">
         <span id="status-badge" class="status-indicator">READY</span>
-        <button id="btn-open-settings" class="icon-btn" title="SETTINGS (S)">[SETTING]</button>
+        <button id="btn-open-settings" class="icon-btn" title="설정 (S)">SETTING</button>
       </div>
     </header>
 
@@ -65,7 +65,7 @@
         <span class="sys-code">LCB-SYS-2.0</span>
       </div>
       <div class="footer-center">
-        <span id="hint-text" class="hint-text">[ SPACE / CLICK: 진행 ] &nbsp; [ R: 다시 재생 ] &nbsp; [ S: 설정 ]</span>
+        <span id="hint-text" class="hint-text">SPACE / 화면 터치: 진행 &nbsp;|&nbsp; R: 다시 재생 &nbsp;|&nbsp; S: 설정</span>
       </div>
       <div class="footer-right">
         <span id="clock-display" class="clock-text">--:--:--</span>
@@ -82,51 +82,51 @@
       <div class="modal-header">
         <div class="modal-title-group">
           <div class="modal-title">
-            <span class="title-tag">[CONFIG]</span>
+            <span class="title-tag">CONFIG</span>
             <span>단테 삐삐 환경 설정</span>
             <span class="version-pill">v2.0</span>
           </div>
           <span class="modal-subtitle">DANTE PDA CONFIGURATION SYSTEM</span>
         </div>
         <div class="modal-header-actions">
-          <span class="esc-badge">[ ESC: CLOSE ]</span>
-          <button id="btn-close-settings" class="close-btn" title="닫기">[X]</button>
+          <span class="esc-badge">ESC: 닫기</span>
+          <button id="btn-close-settings" class="close-btn" title="닫기">&times;</button>
         </div>
       </div>
 
-      <!-- 세그먼트 탭 네비게이션 -->
+      <!-- 세그먼트 탭 네비게이션 (대괄호 제거) -->
       <div class="modal-tabs">
         <button class="tab-btn active" data-tab="tab-calendar">
-          <span>[ 캘린더 연동 ]</span>
+          <span>캘린더 연동</span>
         </button>
         <button class="tab-btn" data-tab="tab-messages">
-          <span>[ 메시지 & STAGE 관리 ]</span>
+          <span>메시지 & STAGE 관리</span>
         </button>
         <button class="tab-btn" data-tab="tab-sound">
-          <span>[ 사운드 & 화면 설정 ]</span>
+          <span>사운드 & 화면 설정</span>
         </button>
       </div>
 
       <!-- 모달 본문 영역 -->
       <div class="modal-body">
         
-        <!-- ── 탭 1: 캘린더 연동 (Google 로그인 및 iCal) ── -->
+        <!-- ── 탭 1: 캘린더 연동 ── -->
         <div id="tab-calendar" class="tab-pane active">
           
           <!-- 구글 간편 로그인 연동 카드 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">[ GOOGLE 계정 간편 로그인 연동 ]</span>
+              <span class="card-tag">GOOGLE 계정 간편 로그인</span>
             </div>
             <p class="section-desc">
-              구글 계정으로 로그인하여 오늘의 구글 캘린더 일정을 원클릭으로 동기화합니다 (3단계 자동 분할).
+              구글 계정으로 로그인하면 오늘 캘린더 일정을 자동으로 가져와 3단계로 분할하여 <strong>'메시지 & STAGE 관리'</strong>에 즉시 채워줍니다.
             </p>
             <div class="oauth-action-row">
               <button id="btn-google-login" class="btn btn-google">
                 <span class="btn-g-logo">G</span>
                 <span id="google-login-text">Google 계정으로 로그인하여 동기화</span>
               </button>
-              <button id="btn-google-logout" class="btn btn-danger-outline hidden">[ 연결 해제 ]</button>
+              <button id="btn-google-logout" class="btn btn-danger-outline hidden">연결 해제</button>
             </div>
             <div id="oauth-account-info" class="oauth-account-status hidden">
               <span class="status-dot-active"></span>
@@ -134,32 +134,26 @@
             </div>
           </div>
 
-          <!-- 또는 비공개 iCal 주소 연동 -->
+          <!-- iCal 비공개 URL 연동 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">[ iCal 비공개 URL 연동 ]</span>
-              <button id="btn-paste-clipboard" class="btn-link">[ 클립보드 붙여넣기 ]</button>
+              <span class="card-tag">iCal 비공개 URL 연동</span>
+              <button id="btn-paste-clipboard" class="btn-link">클립보드 붙여넣기</button>
             </div>
             <p class="section-desc">
-              Google 캘린더 웹 > 캘린더 설정 > <strong>'iCal 형식의 비공개 주소'</strong> URL을 입력하여 동기화합니다.
+              Google 캘린더 설정에서 복사한 <strong>'iCal 형식의 비공개 주소'</strong> URL을 입력하여 동기화할 수 있습니다.
             </p>
             <div class="input-with-btn">
               <input type="text" id="input-ics-url" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" autocomplete="off" spellcheck="false">
-              <button id="btn-sync-now" class="btn btn-primary">[ 즉시 동기화 ]</button>
+              <button id="btn-sync-now" class="btn btn-primary">즉시 동기화</button>
             </div>
           </div>
 
-          <!-- 현재 로드된 오늘 일정 요약 카드 (3단계 고정) -->
-          <div class="preview-card">
-            <div class="preview-header">
-              <div class="preview-title">
-                <span class="dot-indicator"></span>
-                <span>오늘의 3단계 분할 일정 프리뷰</span>
-              </div>
-              <span id="sync-stage-count" class="preview-badge">3 STAGES LOADED</span>
-            </div>
-            <div id="calendar-preview-list" class="preview-list">
-              <!-- JS에서 동적으로 3단계 일정 목록 렌더링 -->
+          <!-- 동기화 안내 팁 카드 -->
+          <div class="info-tip-box">
+            <div class="tip-title">알림</div>
+            <div class="tip-desc">
+              동기화된 일정 메시지는 <strong>[메시지 & STAGE 관리]</strong> 탭에 자동으로 3단계로 배치되며, 각 메시지를 유저가 원하는 대로 직접 수정하거나 단계를 추가할 수 있습니다.
             </div>
           </div>
 
@@ -187,16 +181,16 @@
             <div class="stage-control-group">
               <span class="stage-total-label">총 단계 수:</span>
               <span id="label-custom-stage-count" class="stage-count-badge">3 STAGES</span>
-              <button id="btn-add-stage" class="btn btn-sm btn-primary">[ + STAGE 추가 ]</button>
+              <button id="btn-add-stage" class="btn btn-sm btn-primary">+ STAGE 추가</button>
             </div>
             <div class="sample-actions">
-              <button id="btn-load-sample" class="btn btn-sm btn-secondary">[ 기본 예시 불러오기 ]</button>
-              <button id="btn-clear-messages" class="btn btn-sm btn-danger-outline">[ 전체 비우기 ]</button>
+              <button id="btn-load-sample" class="btn btn-sm btn-secondary">기본 예시 불러오기</button>
+              <button id="btn-clear-messages" class="btn btn-sm btn-danger-outline">전체 비우기</button>
             </div>
           </div>
 
           <p class="section-desc" style="margin-bottom: 8px;">
-            원하는 만큼 STAGE를 추가하고 각 단계별 메시지를 작성하세요. 작성된 내용은 항상 저장됩니다.
+            각 STAGE별로 출력될 메시지들을 한 줄에 하나씩 직접 입력하고 수정할 수 있습니다.
           </p>
 
           <!-- 동적으로 생성되는 각 STAGE 카드 컨테이너 -->
@@ -205,7 +199,7 @@
           </div>
 
           <button id="btn-apply-custom-messages" class="btn btn-primary btn-block" style="margin-top: 10px;">
-            [ 작성한 STAGE 및 메시지로 삐삐 즉시 적용 ]
+            작성한 STAGE 및 메시지로 삐삐 즉시 적용
           </button>
         </div>
 
@@ -215,7 +209,7 @@
           <!-- 볼륨 설정 카드 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">[ AUDIO CONTROL ]</span>
+              <span class="card-tag">AUDIO CONTROL</span>
             </div>
             
             <div class="form-group">
@@ -225,7 +219,7 @@
               </div>
               <div class="input-with-btn">
                 <input type="range" id="slider-volume" min="0" max="100" value="80" class="cyber-slider">
-                <button id="btn-test-sound" class="btn btn-secondary">[ 소리 테스트 ]</button>
+                <button id="btn-test-sound" class="btn btn-secondary">소리 테스트</button>
               </div>
             </div>
 
@@ -244,7 +238,7 @@
           <!-- 비주얼 및 이펙트 카드 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">[ DISPLAY & DECRYPTION EFFECTS ]</span>
+              <span class="card-tag">DISPLAY & DECRYPTION EFFECTS</span>
             </div>
 
             <div class="option-row">
@@ -287,9 +281,9 @@
                 <div class="option-desc">단테 삐삐의 발광 색상 프리셋을 선택합니다.</div>
               </div>
               <select id="select-theme-color" class="cyber-select">
-                <option value="cyan" selected>[ CYAN ] 단테 시안 (Cyan Phosphor)</option>
-                <option value="amber">[ AMBER ] 황금가지 앰버 (Golden Amber)</option>
-                <option value="green">[ GREEN ] 레트로 그린 (Matrix Green)</option>
+                <option value="cyan" selected>단테 시안 (Cyan Phosphor)</option>
+                <option value="amber">황금가지 앰버 (Golden Amber)</option>
+                <option value="green">레트로 그린 (Matrix Green)</option>
               </select>
             </div>
           </div>
@@ -298,12 +292,12 @@
 
       </div>
 
-      <!-- 모달 푸터 액션 버튼 -->
+      <!-- 모달 푸터 액션 버튼 (대괄호 제거) -->
       <div class="modal-footer">
-        <button id="btn-reset-default" class="btn btn-danger-outline">[ 기본값 초기화 ]</button>
+        <button id="btn-reset-default" class="btn btn-danger-outline">기본값 초기화</button>
         <div class="footer-right-btns">
-          <button id="btn-cancel-settings" class="btn btn-secondary">[ 취소 ]</button>
-          <button id="btn-save-settings" class="btn btn-primary">[ 설정 저장 및 닫기 ]</button>
+          <button id="btn-cancel-settings" class="btn btn-secondary">취소</button>
+          <button id="btn-save-settings" class="btn btn-primary">설정 저장 및 닫기</button>
         </div>
       </div>
 

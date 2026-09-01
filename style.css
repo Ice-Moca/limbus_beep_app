@@ -187,8 +187,9 @@ html, body {
   border: 1px solid var(--cyan-dim);
   color: var(--cyan-primary);
   font-family: var(--font-main);
-  font-size: 12px;
-  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 5px 12px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -197,7 +198,7 @@ html, body {
 .icon-btn:hover {
   background: rgba(0, 229, 255, 0.2);
   border-color: var(--cyan-primary);
-  transform: scale(1.05);
+  box-shadow: 0 0 10px var(--cyan-glow);
 }
 
 /* ── 중앙 디스플레이 ── */
@@ -330,7 +331,7 @@ html, body {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   환경 설정 모달 (세련된 다크 사이버 테마 & 가독성 최적화)
+   환경 설정 모달
    ═══════════════════════════════════════════════════════════ */
 .modal-overlay {
   position: fixed;
@@ -435,11 +436,11 @@ html, body {
   background: transparent;
   border: 1px solid #1a2e40;
   color: var(--text-muted);
-  font-family: var(--font-main);
-  font-size: 11px;
+  font-size: 18px;
+  line-height: 1;
   cursor: pointer;
-  padding: 3px 8px;
-  border-radius: 3px;
+  padding: 4px 10px;
+  border-radius: 4px;
   transition: all 0.2s ease;
 }
 
@@ -552,6 +553,28 @@ html, body {
   text-decoration: underline;
 }
 
+/* 동기화 안내 팁 박스 */
+.info-tip-box {
+  background: #040910;
+  border: 1px solid #12283a;
+  border-left: 3px solid var(--cyan-primary);
+  padding: 10px 14px;
+  border-radius: 4px;
+}
+
+.tip-title {
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--cyan-primary);
+  margin-bottom: 3px;
+}
+
+.tip-desc {
+  font-size: 11px;
+  color: #90a4ae;
+  line-height: 1.4;
+}
+
 /* 구글 로그인 액션 바 */
 .oauth-action-row {
   display: flex;
@@ -625,7 +648,7 @@ html, body {
   margin-top: 2px;
 }
 
-/* 폼 입력창 (가독성 향상) */
+/* 폼 입력창 */
 input[type="text"], textarea, .cyber-select {
   background: #03060a;
   border: 1px solid #162b3d;
@@ -649,91 +672,6 @@ input[type="text"]:focus, textarea:focus, .cyber-select:focus {
 .input-with-btn {
   display: flex;
   gap: 8px;
-}
-
-/* 프리뷰 카드 */
-.preview-card {
-  background: #04080c;
-  border: 1px solid #142433;
-  border-radius: 6px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.preview-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: bold;
-  color: var(--amber-accent);
-}
-
-.dot-indicator {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--amber-accent);
-  box-shadow: 0 0 6px var(--amber-accent);
-}
-
-.preview-badge {
-  font-size: 10px;
-  color: var(--text-muted);
-  border: 1px solid #192d3f;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.preview-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 140px;
-  overflow-y: auto;
-}
-
-.preview-stage-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #070e16;
-  border: 1px solid #10202e;
-  padding: 6px 10px;
-  border-radius: 4px;
-}
-
-.preview-stage-tag {
-  font-size: 10px;
-  font-weight: bold;
-  background: var(--cyan-dark);
-  color: var(--cyan-primary);
-  padding: 2px 6px;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-
-.preview-stage-text {
-  font-size: 12px;
-  color: #cfd8dc;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.preview-stage-time {
-  font-size: 11px;
-  color: var(--amber-accent);
-  white-space: nowrap;
 }
 
 /* 탭 2: STAGE 동적 관리 스타일 */
@@ -778,8 +716,8 @@ input[type="text"]:focus, textarea:focus, .cyber-select:focus {
 .stage-cards-scroll {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-height: 320px;
+  gap: 12px;
+  max-height: 330px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -788,10 +726,10 @@ input[type="text"]:focus, textarea:focus, .cyber-select:focus {
   background: #050a10;
   border: 1px solid #152636;
   border-radius: 6px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   transition: border-color 0.2s ease;
 }
 
@@ -817,7 +755,7 @@ input[type="text"]:focus, textarea:focus, .cyber-select:focus {
 .stage-pill-green { background: #004d22; color: var(--text-success); }
 
 .stage-sub-hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
@@ -826,8 +764,8 @@ input[type="text"]:focus, textarea:focus, .cyber-select:focus {
   border: 1px solid rgba(255, 82, 82, 0.3);
   color: var(--text-danger);
   font-family: var(--font-main);
-  font-size: 10px;
-  padding: 2px 6px;
+  font-size: 11px;
+  padding: 2px 8px;
   border-radius: 3px;
   cursor: pointer;
 }
@@ -912,9 +850,9 @@ input:checked + .slider-switch:before {
 /* 버튼 */
 .btn {
   font-family: var(--font-main);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: bold;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: 4px;
   border: none;
   cursor: pointer;
@@ -927,8 +865,8 @@ input:checked + .slider-switch:before {
 }
 
 .btn-sm {
-  padding: 4px 8px;
-  font-size: 10px;
+  padding: 5px 10px;
+  font-size: 11px;
 }
 
 .btn-block {
@@ -972,7 +910,7 @@ input:checked + .slider-switch:before {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 22px;
+  padding: 14px 22px;
   border-top: 1px solid #142433;
   background: #05080e;
 }

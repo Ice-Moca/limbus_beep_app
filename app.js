@@ -33,7 +33,7 @@ const DEFAULT_MESSAGES = [
     stage: 1,
     messages: [
       { text: "관리자님, 오늘의 일정을 확인하십시오.", time_info: "09:00 - 10:00" },
-      { text: "설정[S]에서 구글 캘린더를 연동할 수 있습니다.", time_info: "11:00 - 12:00" }
+      { text: "설정에서 구글 캘린더를 연동할 수 있습니다.", time_info: "11:00 - 12:00" }
     ]
   },
   {
@@ -64,7 +64,6 @@ class PagerApp {
     this.animInterval = null;
     this.beepTimeout = null;
     this.audioCtx = null;
-    this.tokenClient = null;
     
     this.initDOM();
     this.bindEvents();
@@ -126,7 +125,7 @@ class PagerApp {
       labelCustomStageCount: document.getElementById('label-custom-stage-count'),
       stageCardsContainer: document.getElementById('stage-cards-container'),
       
-      // 프리뷰 & 세부 설정
+      // 설정 필드
       inputIcsUrl: document.getElementById('input-ics-url'),
       selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
@@ -136,8 +135,6 @@ class PagerApp {
       labelVolume: document.getElementById('label-volume'),
       toggleScanlines: document.getElementById('toggle-scanlines'),
       toggleVignette: document.getElementById('toggle-vignette'),
-      syncStageCount: document.getElementById('sync-stage-count'),
-      calendarPreviewList: document.getElementById('calendar-preview-list'),
       
       audio: document.getElementById('beep-audio'),
       toast: document.getElementById('toast'),
@@ -193,10 +190,10 @@ class PagerApp {
         const text = await navigator.clipboard.readText();
         if (text) {
           this.dom.inputIcsUrl.value = text.trim();
-          this.showToast("[OK] 클립보드 내용을 붙여넣었습니다.");
+          this.showToast("클립보드 내용을 붙여넣었습니다.");
         }
       } catch (err) {
-        this.showToast("[!] 클립보드 권한이 필요합니다. 직접 붙여넣으세요.");
+        this.showToast("클립보드 권한이 필요합니다. 직접 붙여넣으세요.");
       }
     });
 
@@ -219,7 +216,7 @@ class PagerApp {
         messages: [{ text: `새 일정 메시지 ${newStageNum}`, time_info: "" }]
       });
       this.renderCustomStageCards();
-      this.showToast(`[+] STAGE ${newStageNum} 추가됨`);
+      this.showToast(`STAGE ${newStageNum} 추가됨`);
     });
 
     // 7. 볼륨 슬라이더
@@ -260,13 +257,13 @@ class PagerApp {
     this.dom.btnLoadSample.addEventListener('click', () => {
       this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
       this.renderCustomStageCards();
-      this.showToast("[OK] 기본 3단계 예시가 로드되었습니다.");
+      this.showToast("기본 3단계 예시가 로드되었습니다.");
     });
 
     this.dom.btnClearMessages.addEventListener('click', () => {
       this.customStages = [{ stage: 1, messages: [] }];
       this.renderCustomStageCards();
-      this.showToast("[OK] 메시지 입력란을 모두 비웠습니다.");
+      this.showToast("메시지 입력란을 모두 비웠습니다.");
     });
 
     // 13. 작성된 STAGE 삐삐 적용
@@ -305,7 +302,7 @@ class PagerApp {
     this.currentStageIdx = 0;
     this.currentMsgIdx = 0;
     this.updateDisplay();
-    this.renderPreviewList();
+    this.renderCustomStageCards();
   }
 
   applyThemeClass(themeName) {
@@ -333,7 +330,7 @@ class PagerApp {
     if (this.config.google_token) {
       this.dom.googleLoginText.textContent = "Google 캘린더 즉시 재동기화";
       this.dom.oauthAccountInfo.classList.remove('hidden');
-      this.dom.oauthAccountEmail.textContent = this.config.google_email || "Google 계정 연동됨";
+      this.dom.oauthAccountEmail.textContent = this.config.google_email ? `${this.config.google_email} 연동됨` : "Google 계정 연동 완료";
       this.dom.btnGoogleLogout.classList.remove('hidden');
     } else {
       this.dom.googleLoginText.textContent = "Google 계정으로 로그인하여 동기화";
@@ -343,15 +340,13 @@ class PagerApp {
   }
 
   async handleGoogleSignIn() {
-    // 1. 이미 토큰이 유효한 경우 바로 일정 가져오기
     if (this.config.google_token) {
       await this.fetchGoogleCalendarApi(this.config.google_token);
       return;
     }
 
-    // 2. Google Identity Services / Web Client를 통한 OAuth 팝업
     try {
-      const clientId = "889981242318-q7v5hph7l7q5r34p8c23h4kfffl9e7da.apps.googleusercontent.com"; // 기본 공용 OAuth Client 또는 유저 Client
+      const clientId = "889981242318-q7v5hph7l7q5r34p8c23h4kfffl9e7da.apps.googleusercontent.com";
       const redirectUri = window.location.origin ? `${window.location.origin}${window.location.pathname}` : 'http://localhost:8765/index.html';
       const scope = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email';
 
@@ -363,7 +358,7 @@ class PagerApp {
       const top = window.screen.height / 2 - height / 2;
       const popup = window.open(authUrl, 'google_login_popup', `width=${width},height=${height},top=${top},left=${left}`);
 
-      this.showToast("[..] 구글 로그인 팝업 창에서 계정을 선택하세요.");
+      this.showToast("구글 로그인 팝업 창에서 계정을 선택하세요.");
 
       const pollTimer = setInterval(async () => {
         try {
@@ -380,7 +375,6 @@ class PagerApp {
               clearInterval(pollTimer);
               this.config.google_token = token;
               
-              // 이메일 정보 조회
               try {
                 const userResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
                   headers: { 'Authorization': `Bearer ${token}` }
@@ -393,7 +387,7 @@ class PagerApp {
 
               this.saveConfig(this.config);
               this.updateGoogleUI();
-              this.showToast("[OK] Google 계정 로그인 완료!");
+              this.showToast("Google 계정 로그인 성공!");
               await this.fetchGoogleCalendarApi(token);
             }
           }
@@ -402,7 +396,7 @@ class PagerApp {
 
     } catch (err) {
       console.warn(err);
-      this.showToast("[!] 팝업이 차단되었는지 확인하세요.");
+      this.showToast("팝업이 차단되었는지 확인하세요.");
     }
   }
 
@@ -411,11 +405,11 @@ class PagerApp {
     this.config.google_email = '';
     this.saveConfig(this.config);
     this.updateGoogleUI();
-    this.showToast("[OK] Google 계정 연결이 해제되었습니다.");
+    this.showToast("Google 계정 연결이 해제되었습니다.");
   }
 
   async fetchGoogleCalendarApi(token) {
-    this.showToast("[..] Google 캘린더에서 오늘의 일정을 가져오는 중...");
+    this.showToast("Google 캘린더에서 오늘의 일정을 가져오는 중...");
     try {
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
@@ -455,14 +449,13 @@ class PagerApp {
         return { text: summary, time_info: timeInfo };
       });
 
-      // 캘린더 연동 분할 단계는 항상 3단계로 고정!
+      // 3단계로 분할하여 메시지 저장 및 에디터에 즉시 자동 채움!
       const stages = this.distributeEventsTo3Stages(events);
-
       this.saveStoredMessages(stages);
-      this.showToast(`[OK] 오늘 일정 ${events.length}개를 3단계로 동기화 완료!`);
+      this.showToast(`오늘 일정 ${events.length}개를 가져와 [메시지 & STAGE]에 채웠습니다.`);
     } catch (err) {
       console.error(err);
-      alert(`[!] Google Calendar 동기화 실패: ${err.message}`);
+      alert(`Google Calendar 동기화 실패: ${err.message}`);
     }
   }
 
@@ -670,7 +663,7 @@ class PagerApp {
     this.dom.displayMain.className = 'main-text accent';
 
     if (msg.time_info) {
-      this.dom.displayTime.textContent = `[TIME] ${msg.time_info}`;
+      this.dom.displayTime.textContent = msg.time_info;
       this.dom.displayTime.classList.add('visible');
     } else {
       this.dom.displayTime.classList.remove('visible');
@@ -713,7 +706,7 @@ class PagerApp {
     this.updateBadges();
 
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "[ 단테 삐삐 대기 중 ]";
+    this.dom.displaySubLabel.textContent = "단테 삐삐 대기 중";
     this.dom.displayMain.textContent = "SPACE 를 눌러 시작";
     this.dom.displayMain.className = 'main-text';
     this.dom.displayTime.classList.remove('visible');
@@ -769,7 +762,6 @@ class PagerApp {
     this.customStages = JSON.parse(JSON.stringify(this.messages));
     this.renderCustomStageCards();
 
-    this.renderPreviewList();
     this.dom.modal.classList.remove('hidden');
   }
 
@@ -778,7 +770,7 @@ class PagerApp {
     this.dom.modal.classList.add('hidden');
   }
 
-  // ── 동적 STAGE 카드 렌더링 ──
+  // ── 동적 STAGE 카드 렌더링 (각 STAGE 메시지 직접 수정 가능) ──
   renderCustomStageCards() {
     this.dom.stageCardsContainer.innerHTML = '';
     this.dom.labelCustomStageCount.textContent = `${this.customStages.length} STAGES`;
@@ -791,17 +783,23 @@ class PagerApp {
       const card = document.createElement('div');
       card.className = 'stage-edit-card';
 
-      const linesText = (stage.messages || []).map(m => m.text).join('\n');
+      // 각 메시지를 줄바꿈으로 조합 (시간 정보가 있으면 괄호로 병합)
+      const linesText = (stage.messages || []).map(m => {
+        if (m.time_info && m.time_info !== "종일") {
+          return `${m.time_info} | ${m.text}`;
+        }
+        return m.text;
+      }).join('\n');
 
       card.innerHTML = `
         <div class="stage-edit-header">
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="stage-pill ${pillClass}">STAGE ${stageNum}</span>
-            <span class="stage-sub-hint">단계 ${stageNum} 메시지 (줄바꿈으로 여러 개 입력)</span>
+            <span class="stage-sub-hint">메시지 ${(stage.messages || []).length}개 (줄바꿈으로 구분)</span>
           </div>
-          ${this.customStages.length > 1 ? `<button class="btn-del-stage" data-idx="${idx}">[ 삭제 ]</button>` : ''}
+          ${this.customStages.length > 1 ? `<button class="btn-del-stage" data-idx="${idx}">삭제</button>` : ''}
         </div>
-        <textarea id="custom-stage-input-${idx}" rows="2" placeholder="줄바꿈으로 구분하여 입력">${linesText}</textarea>
+        <textarea id="custom-stage-input-${idx}" rows="3" placeholder="예: 09:00 - 10:00 | 회의&#10;오후 업무">${linesText}</textarea>
       `;
 
       // 개별 삭제 버튼 이벤트
@@ -812,7 +810,7 @@ class PagerApp {
           const targetIdx = parseInt(e.target.dataset.idx, 10);
           this.customStages.splice(targetIdx, 1);
           this.renderCustomStageCards();
-          this.showToast(`[-] STAGE 삭제됨 (현재 ${this.customStages.length}개)`);
+          this.showToast(`STAGE 삭제됨 (현재 ${this.customStages.length}개)`);
         });
       }
 
@@ -824,9 +822,18 @@ class PagerApp {
     this.customStages.forEach((stage, idx) => {
       const textarea = document.getElementById(`custom-stage-input-${idx}`);
       if (textarea) {
-        const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
+        const rawLines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
         stage.stage = idx + 1;
-        stage.messages = lines.map(t => ({ text: t, time_info: "" }));
+        stage.messages = rawLines.map(line => {
+          if (line.includes('|')) {
+            const parts = line.split('|');
+            return {
+              time_info: parts[0].trim(),
+              text: parts.slice(1).join('|').trim()
+            };
+          }
+          return { text: line, time_info: "" };
+        });
       }
     });
   }
@@ -836,37 +843,13 @@ class PagerApp {
     const validStages = this.customStages.filter(s => s.messages && s.messages.length > 0);
 
     if (!validStages.length) {
-      alert("[!] 최소 1개 이상의 메시지를 작성해야 합니다.");
+      alert("최소 1개 이상의 메시지를 작성해야 합니다.");
       return;
     }
 
     this.saveStoredMessages(validStages);
-    this.showToast(`[OK] ${validStages.length}개 단계 메시지가 시뮬레이터에 적용되었습니다.`);
+    this.showToast(`${validStages.length}개 단계 메시지가 시뮬레이터에 적용되었습니다.`);
     this.closeModal();
-  }
-
-  renderPreviewList() {
-    this.dom.calendarPreviewList.innerHTML = '';
-    const totalEvents = this.messages.reduce((acc, s) => acc + (s.messages ? s.messages.length : 0), 0);
-    this.dom.syncStageCount.textContent = `총 ${totalEvents}개 일정 (${this.messages.length}단계)`;
-
-    if (!this.messages.length) {
-      this.dom.calendarPreviewList.innerHTML = '<div style="font-size:11px;color:#627d92;padding:8px;text-align:center;">동기화된 일정이 없습니다.</div>';
-      return;
-    }
-
-    this.messages.forEach((stage, sIdx) => {
-      (stage.messages || []).forEach(msg => {
-        const row = document.createElement('div');
-        row.className = 'preview-stage-row';
-        row.innerHTML = `
-          <span class="preview-stage-tag">STAGE ${stage.stage || sIdx + 1}</span>
-          <span class="preview-stage-text">${msg.text}</span>
-          <span class="preview-stage-time">${msg.time_info || ''}</span>
-        `;
-        this.dom.calendarPreviewList.appendChild(row);
-      });
-    });
   }
 
   saveSettingsFromModal() {
@@ -881,7 +864,7 @@ class PagerApp {
       vignette: this.dom.toggleVignette.checked,
     };
     this.saveConfig(newConfig);
-    this.showToast("[OK] 환경 설정이 저장되었습니다.");
+    this.showToast("환경 설정이 저장되었습니다.");
     this.closeModal();
   }
 
@@ -890,18 +873,18 @@ class PagerApp {
       this.saveConfig(DEFAULT_CONFIG);
       this.saveStoredMessages(DEFAULT_MESSAGES);
       this.openModal();
-      this.showToast("[OK] 기본값으로 복원되었습니다.");
+      this.showToast("기본값으로 복원되었습니다.");
     }
   }
 
   // ── Google Calendar ICS 파싱 & 동기화 ──
   async syncCalendar(url, isSilent = false) {
     if (!url || url.length < 10) {
-      if (!isSilent) alert("[!] 유효한 Google Calendar 비공개 iCal 주소를 입력해주세요.");
+      if (!isSilent) alert("유효한 Google Calendar 비공개 iCal 주소를 입력해주세요.");
       return;
     }
 
-    if (!isSilent) this.dom.btnSyncNow.textContent = "[ 동기화 중... ]";
+    if (!isSilent) this.dom.btnSyncNow.textContent = "동기화 중...";
 
     try {
       let icsText = "";
@@ -919,22 +902,22 @@ class PagerApp {
       }
 
       const events = this.parseIcsText(icsText);
-      // 캘린더 연동 분할 단계는 항상 3단계 고정
       const stages = this.distributeEventsTo3Stages(events.map(e => this.formatEvent(e)));
 
+      // 3단계로 분할하여 메시지 저장 및 에디터에 즉시 자동 채움!
       this.saveStoredMessages(stages);
       this.config.ics_url = url;
       this.saveConfig(this.config);
 
       if (!isSilent) {
-        this.showToast(`[OK] 오늘 일정 ${events.length}개를 3단계로 동기화했습니다!`);
-        this.dom.btnSyncNow.textContent = "[ 즉시 동기화 ]";
+        this.showToast(`오늘 일정 ${events.length}개를 가져와 [메시지 & STAGE]에 채웠습니다.`);
+        this.dom.btnSyncNow.textContent = "즉시 동기화";
       }
     } catch (e) {
       console.error("동기화 실패:", e);
       if (!isSilent) {
-        alert(`[!] 캘린더 동기화 실패: ${e.message}`);
-        this.dom.btnSyncNow.textContent = "[ 즉시 동기화 ]";
+        alert(`캘린더 동기화 실패: ${e.message}`);
+        this.dom.btnSyncNow.textContent = "즉시 동기화";
       }
     }
   }
@@ -1035,7 +1018,7 @@ class PagerApp {
       return [{ stage: 1, messages: [{ text: "오늘 등록된 일정이 없습니다.", time_info: "오늘" }] }];
     }
 
-    const n = 3; // 캘린더 연동은 항상 3단계 고정
+    const n = 3; // 캘린더 연동은 3단계 고정
     const base = Math.floor(formattedEvents.length / n);
     const extra = formattedEvents.length % n;
     const stages = [];
