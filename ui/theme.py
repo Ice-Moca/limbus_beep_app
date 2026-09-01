@@ -1,3 +1,4 @@
+from __future__ import annotations
 import flet as ft
 
 # 림버스 컴퍼니 단테 삐삐 테마 컬러

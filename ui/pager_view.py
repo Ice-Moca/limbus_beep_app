@@ -1,5 +1,7 @@
+from __future__ import annotations
 import threading
 import time
+from typing import Optional, List, Dict
 import flet as ft
 from core.cipher_engine import generate_encrypted_text, generate_decoding_text, generate_dots_display
 from ui.theme import (

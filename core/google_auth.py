@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Google Calendar API (OAuth 2.0) 연동 모듈
 ==========================================

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import flet as ft
 from ui.theme import (
     FONT_FAMILY, CYAN_PRIMARY, CYAN_ACCENT, CYAN_DIM, CYAN_DARK,
