@@ -20,28 +20,31 @@ const DEFAULT_CONFIG = {
   ics_url: '',
   auto_sync_min: 60,
   decode_speed: 'normal', // fast: 0.5s, normal: 0.9s, slow: 1.5s
+  sound_type: 'file',     // file | synth
+  theme_color: 'cyan',    // cyan | amber | green
   scanlines: true,
+  vignette: true,
 };
 
 const DEFAULT_MESSAGES = [
   {
     stage: 1,
     messages: [
-      { text: "관리자님, 오늘의 일정을 확인하십시오.", time_info: "INFO" },
-      { text: "설정(⚙)에서 구글 캘린더를 연동할 수 있습니다.", time_info: "GUIDE" }
+      { text: "관리자님, 오늘의 일정을 확인하십시오.", time_info: "09:00 - 10:00" },
+      { text: "설정(⚙)에서 구글 캘린더를 연동할 수 있습니다.", time_info: "11:00 - 12:00" }
     ]
   },
   {
     stage: 2,
     messages: [
-      { text: "수감자들의 상태를 점검할 시간입니다.", time_info: "SYSTEM" },
-      { text: "황금가지를 향한 여정을 계속하십시오.", time_info: "MISSION" }
+      { text: "수감자들의 상태를 점검할 시간입니다.", time_info: "14:00 - 15:30" },
+      { text: "황금가지를 향한 여정을 계속하십시오.", time_info: "16:00 - 18:00" }
     ]
   },
   {
     stage: 3,
     messages: [
-      { text: "오늘 하루도 수고하셨습니다. _CLEAR._", time_info: "COMPLETE" }
+      { text: "오늘 하루도 수고하셨습니다. _CLEAR._", time_info: "20:00 - 21:00" }
     ]
   }
 ];
@@ -96,19 +99,27 @@ class PagerApp {
       modal: document.getElementById('settings-modal'),
       btnOpenSettings: document.getElementById('btn-open-settings'),
       btnCloseSettings: document.getElementById('btn-close-settings'),
+      btnCancelSettings: document.getElementById('btn-cancel-settings'),
       btnSaveSettings: document.getElementById('btn-save-settings'),
       btnResetDefault: document.getElementById('btn-reset-default'),
       btnSyncNow: document.getElementById('btn-sync-now'),
+      btnPasteClipboard: document.getElementById('btn-paste-clipboard'),
       btnTestSound: document.getElementById('btn-test-sound'),
       btnApplyCustom: document.getElementById('btn-apply-custom-messages'),
+      btnLoadSample: document.getElementById('btn-load-sample'),
+      btnClearMessages: document.getElementById('btn-clear-messages'),
       
       inputIcsUrl: document.getElementById('input-ics-url'),
       selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
+      selectSoundType: document.getElementById('select-sound-type'),
+      selectThemeColor: document.getElementById('select-theme-color'),
       sliderVolume: document.getElementById('slider-volume'),
       labelVolume: document.getElementById('label-volume'),
       toggleScanlines: document.getElementById('toggle-scanlines'),
-      syncStatusMsg: document.getElementById('sync-status-msg'),
+      toggleVignette: document.getElementById('toggle-vignette'),
+      syncStageCount: document.getElementById('sync-stage-count'),
+      calendarPreviewList: document.getElementById('calendar-preview-list'),
       
       editStage1: document.getElementById('edit-stage-1'),
       editStage2: document.getElementById('edit-stage-2'),
@@ -116,7 +127,8 @@ class PagerApp {
       
       audio: document.getElementById('beep-audio'),
       toast: document.getElementById('toast'),
-      crtOverlay: document.querySelector('.crt-overlay'),
+      crtOverlay: document.getElementById('crt-overlay'),
+      crtVignette: document.getElementById('crt-vignette'),
       tabBtns: document.querySelectorAll('.tab-btn'),
       tabPanes: document.querySelectorAll('.tab-pane'),
     };
@@ -156,11 +168,25 @@ class PagerApp {
     });
 
     this.dom.btnCloseSettings.addEventListener('click', () => this.closeModal());
+    this.dom.btnCancelSettings.addEventListener('click', () => this.closeModal());
     this.dom.modal.addEventListener('click', (e) => {
       if (e.target === this.dom.modal) this.closeModal();
     });
 
-    // 4. 모달 탭 전환
+    // 4. 클립보드 붙여넣기 버튼
+    this.dom.btnPasteClipboard.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          this.dom.inputIcsUrl.value = text.trim();
+          this.showToast("클립보드 내용을 붙여넣었습니다.");
+        }
+      } catch (err) {
+        this.showToast("클립보드 접근 권한이 필요합니다. 직접 붙여넣으세요.");
+      }
+    });
+
+    // 5. 모달 탭 전환
     this.dom.tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         this.dom.tabBtns.forEach(b => b.classList.remove('active'));
@@ -170,27 +196,52 @@ class PagerApp {
       });
     });
 
-    // 5. 볼륨 슬라이더
+    // 6. 볼륨 슬라이더
     this.dom.sliderVolume.addEventListener('input', (e) => {
       this.dom.labelVolume.textContent = `${e.target.value}%`;
     });
 
     this.dom.btnTestSound.addEventListener('click', () => {
       const vol = parseInt(this.dom.sliderVolume.value, 10);
-      this.playBeep(vol);
+      const soundType = this.dom.selectSoundType.value;
+      if (soundType === 'synth') {
+        this.playSynthBeep(vol / 100.0);
+      } else {
+        this.playBeep(vol);
+      }
     });
 
-    // 6. 설정 저장
+    // 7. 실시간 테마 컬러 미리보기
+    this.dom.selectThemeColor.addEventListener('change', (e) => {
+      this.applyThemeClass(e.target.value);
+    });
+
+    // 8. 설정 저장 및 초기화
     this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
     this.dom.btnResetDefault.addEventListener('click', () => this.resetDefaults());
 
-    // 7. 캘린더 동기화
+    // 9. 캘린더 동기화
     this.dom.btnSyncNow.addEventListener('click', () => {
       const url = this.dom.inputIcsUrl.value.trim();
       this.syncCalendar(url);
     });
 
-    // 8. 커스텀 메시지 적용
+    // 10. 메시지 에디터 툴바 액션
+    this.dom.btnLoadSample.addEventListener('click', () => {
+      this.dom.editStage1.value = "아침식사\n오전 미팅";
+      this.dom.editStage2.value = "점심식사\n수감자 상태 점검";
+      this.dom.editStage3.value = "저녁식사\n오늘 하루도 수고하셨습니다.";
+      this.showToast("기본 예시 메시지가 입력되었습니다.");
+    });
+
+    this.dom.btnClearMessages.addEventListener('click', () => {
+      this.dom.editStage1.value = "";
+      this.dom.editStage2.value = "";
+      this.dom.editStage3.value = "";
+      this.showToast("메시지 입력란을 모두 비웠습니다.");
+    });
+
+    // 11. 커스텀 메시지 적용
     this.dom.btnApplyCustom.addEventListener('click', () => this.applyCustomMessages());
   }
 
@@ -225,19 +276,34 @@ class PagerApp {
     this.currentStageIdx = 0;
     this.currentMsgIdx = 0;
     this.updateDisplay();
-    this.updateSyncStatusText();
+    this.renderPreviewList();
+  }
+
+  applyThemeClass(themeName) {
+    document.body.className = '';
+    if (themeName === 'amber') document.body.classList.add('theme-amber');
+    else if (themeName === 'green') document.body.classList.add('theme-green');
   }
 
   applySettings() {
     if (this.dom.crtOverlay) {
       this.dom.crtOverlay.style.display = this.config.scanlines ? 'block' : 'none';
     }
+    if (this.dom.crtVignette) {
+      this.dom.crtVignette.style.display = this.config.vignette ? 'block' : 'none';
+    }
+    this.applyThemeClass(this.config.theme_color || 'cyan');
   }
 
-  // ── 오디오 재생 (HTML Audio + Web Audio Synth Fallback) ──
+  // ── 오디오 재생 ──
   playBeep(volumePercent = null) {
     const vol = (volumePercent !== null ? volumePercent : this.config.volume) / 100.0;
     if (vol <= 0) return;
+
+    if (this.config.sound_type === 'synth') {
+      this.playSynthBeep(vol);
+      return;
+    }
 
     try {
       this.dom.audio.volume = vol;
@@ -263,7 +329,7 @@ class PagerApp {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(1000, this.audioCtx.currentTime);
 
-      gain.gain.setValueAtTime(vol * 0.3, this.audioCtx.currentTime);
+      gain.gain.setValueAtTime(vol * 0.35, this.audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 1.2);
 
       osc.connect(gain);
@@ -522,18 +588,22 @@ class PagerApp {
     this.dom.labelVolume.textContent = `${this.config.volume}%`;
     this.dom.selectAutoSync.value = String(this.config.auto_sync_min);
     this.dom.selectDecodeSpeed.value = this.config.decode_speed;
+    this.dom.selectSoundType.value = this.config.sound_type || 'file';
+    this.dom.selectThemeColor.value = this.config.theme_color || 'cyan';
     this.dom.toggleScanlines.checked = this.config.scanlines;
+    this.dom.toggleVignette.checked = this.config.vignette !== false;
 
     // 메시지 에디터 세팅
     this.dom.editStage1.value = this.getStageText(0);
     this.dom.editStage2.value = this.getStageText(1);
     this.dom.editStage3.value = this.getStageText(2);
 
-    this.updateSyncStatusText();
+    this.renderPreviewList();
     this.dom.modal.classList.remove('hidden');
   }
 
   closeModal() {
+    this.applySettings();
     this.dom.modal.classList.add('hidden');
   }
 
@@ -542,9 +612,28 @@ class PagerApp {
     return this.messages[stageIdx].messages.map(m => m.text).join('\n');
   }
 
-  updateSyncStatusText() {
+  renderPreviewList() {
+    this.dom.calendarPreviewList.innerHTML = '';
     const totalEvents = this.messages.reduce((acc, s) => acc + (s.messages ? s.messages.length : 0), 0);
-    this.dom.syncStatusMsg.textContent = `현재 등록된 일정: 총 ${totalEvents}개 (${this.messages.length}단계)`;
+    this.dom.syncStageCount.textContent = `총 ${totalEvents}개 일정 (${this.messages.length}단계)`;
+
+    if (!this.messages.length) {
+      this.dom.calendarPreviewList.innerHTML = '<div style="font-size:11px;color:#546e7a;padding:8px;text-align:center;">동기화된 일정이 없습니다.</div>';
+      return;
+    }
+
+    this.messages.forEach((stage, sIdx) => {
+      (stage.messages || []).forEach(msg => {
+        const row = document.createElement('div');
+        row.className = 'preview-stage-row';
+        row.innerHTML = `
+          <span class="preview-stage-tag">STAGE ${stage.stage || sIdx + 1}</span>
+          <span class="preview-stage-text">${msg.text}</span>
+          <span class="preview-stage-time">${msg.time_info || ''}</span>
+        `;
+        this.dom.calendarPreviewList.appendChild(row);
+      });
+    });
   }
 
   saveSettingsFromModal() {
@@ -553,10 +642,13 @@ class PagerApp {
       volume: parseInt(this.dom.sliderVolume.value, 10),
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
       decode_speed: this.dom.selectDecodeSpeed.value,
+      sound_type: this.dom.selectSoundType.value,
+      theme_color: this.dom.selectThemeColor.value,
       scanlines: this.dom.toggleScanlines.checked,
+      vignette: this.dom.toggleVignette.checked,
     };
     this.saveConfig(newConfig);
-    this.showToast("설정이 저장되었습니다.");
+    this.showToast("환경 설정이 저장되었습니다.");
     this.closeModal();
   }
 
@@ -598,16 +690,14 @@ class PagerApp {
       return;
     }
 
-    if (!isSilent) this.dom.btnSyncNow.textContent = "동기화 중...";
+    if (!isSilent) this.dom.btnSyncNow.textContent = "🔄 동기화 중...";
 
     try {
-      // CORS 프록시 또는 직접 호출
       let icsText = "";
       try {
         const resp = await fetch(url);
         icsText = await resp.text();
       } catch (corsErr) {
-        // 클라이언트 직접 fetch 실패 시 올프록시 또는 로컬 API 프록시 활용
         const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
         const resp2 = await fetch(proxyUrl);
         icsText = await resp2.text();
@@ -625,14 +715,14 @@ class PagerApp {
       this.saveConfig(this.config);
 
       if (!isSilent) {
-        this.showToast(`오늘 일정 ${events.length}개를 동기화했습니다!`);
-        this.dom.btnSyncNow.textContent = "즉시 동기화";
+        this.showToast(`오늘 일정 ${events.length}개를 성공적으로 동기화했습니다!`);
+        this.dom.btnSyncNow.textContent = "🔄 즉시 동기화";
       }
     } catch (e) {
       console.error("동기화 실패:", e);
       if (!isSilent) {
         alert(`캘린더 동기화 실패: ${e.message}`);
-        this.dom.btnSyncNow.textContent = "즉시 동기화";
+        this.dom.btnSyncNow.textContent = "🔄 즉시 동기화";
       }
     }
   }
@@ -668,7 +758,6 @@ class PagerApp {
       }
     }
 
-    // 시간순 정렬
     events.sort((a, b) => (a.DTSTART || '').localeCompare(b.DTSTART || ''));
     return events;
   }
@@ -677,7 +766,6 @@ class PagerApp {
     const dtstart = ev.DTSTART || "";
     if (!dtstart) return false;
 
-    // YYYYMMDD 형태
     if (dtstart.length === 8) {
       const ey = parseInt(dtstart.substr(0, 4), 10);
       const em = parseInt(dtstart.substr(4, 2), 10);
@@ -685,7 +773,6 @@ class PagerApp {
       return ey === y && em === m && ed === d;
     }
 
-    // YYYYMMDDTHHMMSSZ 형태
     if (dtstart.includes("T")) {
       const raw = dtstart.replace("Z", "");
       const ey = parseInt(raw.substr(0, 4), 10);
@@ -693,7 +780,6 @@ class PagerApp {
       const ed = parseInt(raw.substr(6, 2), 10);
       let eh = parseInt(raw.substr(9, 2), 10);
 
-      // UTC인 경우 KST(+9) 보정
       if (dtstart.endsWith("Z")) {
         const utcDate = new Date(Date.UTC(ey, em - 1, ed, eh));
         const kstDate = new Date(utcDate.getTime() + 9 * 3600 * 1000);
