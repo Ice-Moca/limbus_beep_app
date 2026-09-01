@@ -211,9 +211,9 @@ class PagerApp {
       }
     });
 
-    // 7. 실시간 글자/배경 색상 프리셋 칩 클릭
-    document.querySelectorAll('.color-chip').forEach(chip => {
-      chip.addEventListener('click', (e) => {
+    // 7. 실시간 글자/배경 색상 프리셋 스와치 클릭
+    document.querySelectorAll('.palette-swatch').forEach(swatch => {
+      swatch.addEventListener('click', (e) => {
         const type = e.currentTarget.dataset.type;
         const color = e.currentTarget.dataset.color;
         if (type === 'font') {
@@ -221,7 +221,7 @@ class PagerApp {
           this.applyCustomColors(color, this.dom.pickerBgColor ? this.dom.pickerBgColor.value : '#000000');
         } else if (type === 'bg') {
           if (this.dom.pickerBgColor) this.dom.pickerBgColor.value = color;
-          this.applyCustomColors(this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2fbffc', color);
+          this.applyCustomColors(this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2FBFFC', color);
         }
       });
     });
@@ -234,7 +234,7 @@ class PagerApp {
     }
     if (this.dom.pickerBgColor) {
       this.dom.pickerBgColor.addEventListener('input', (e) => {
-        this.applyCustomColors(this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2fbffc', e.target.value);
+        this.applyCustomColors(this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2FBFFC', e.target.value);
       });
     }
 
@@ -306,8 +306,8 @@ class PagerApp {
   }
 
   applyCustomColors(fontColor, bgColor) {
-    const fc = fontColor || this.config.font_color || '#2fbffc';
-    const bc = bgColor || this.config.bg_color || '#000000';
+    const fc = (fontColor || this.config.font_color || '#2fbffc').toUpperCase();
+    const bc = (bgColor || this.config.bg_color || '#000000').toUpperCase();
 
     document.documentElement.style.setProperty('--cyan-primary', fc);
     document.documentElement.style.setProperty('--bg-color', bc);
@@ -315,15 +315,30 @@ class PagerApp {
     document.body.style.backgroundColor = bc;
     if (this.dom.app) this.dom.app.style.backgroundColor = bc;
 
-    // 활성 프리셋 칩 시각화
-    document.querySelectorAll('.color-chip[data-type="font"]').forEach(chip => {
-      chip.classList.toggle('active', chip.dataset.color.toLowerCase() === fc.toLowerCase());
+    // 모달 내 실시간 미니 프리뷰 스크린 & Hex 태그 연동
+    const miniPreview = document.getElementById('theme-mini-preview');
+    const miniText = document.getElementById('mini-preview-text');
+    const tagFontHex = document.getElementById('tag-font-hex');
+    const tagBgHex = document.getElementById('tag-bg-hex');
+
+    if (miniPreview) miniPreview.style.backgroundColor = bc;
+    if (miniText) {
+      miniText.style.color = fc;
+      miniText.style.textShadow = `0 0 10px ${fc}88`;
+    }
+    if (tagFontHex) tagFontHex.textContent = fc;
+    if (tagBgHex) tagBgHex.textContent = bc;
+
+    // 활성 프리셋 스와치 시각화
+    document.querySelectorAll('.palette-swatch[data-type="font"]').forEach(swatch => {
+      swatch.classList.toggle('active', swatch.dataset.color.toUpperCase() === fc);
     });
-    document.querySelectorAll('.color-chip[data-type="bg"]').forEach(chip => {
-      chip.classList.toggle('active', chip.dataset.color.toLowerCase() === bc.toLowerCase());
+    document.querySelectorAll('.palette-swatch[data-type="bg"]').forEach(swatch => {
+      swatch.classList.toggle('active', swatch.dataset.color.toUpperCase() === bc);
     });
-    if (this.dom.pickerFontColor) this.dom.pickerFontColor.value = fc;
-    if (this.dom.pickerBgColor) this.dom.pickerBgColor.value = bc;
+
+    if (this.dom.pickerFontColor) this.dom.pickerFontColor.value = fc.length === 7 ? fc : '#2FBFFC';
+    if (this.dom.pickerBgColor) this.dom.pickerBgColor.value = bc.length === 7 ? bc : '#000000';
   }
 
   applyOrientation(mode) {
