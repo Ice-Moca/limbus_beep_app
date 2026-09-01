@@ -336,8 +336,10 @@ class PagerApp {
     const bc = (bgColor || this.config.bg_color || '#000000').toUpperCase();
 
     document.documentElement.style.setProperty('--cyan-primary', fc);
-    document.documentElement.style.setProperty('--bg-color', bc);
+    document.documentElement.style.setProperty('--cyan-accent', fc);
+    document.documentElement.style.setProperty('--cyan-dim', `${fc}88`);
     document.documentElement.style.setProperty('--cyan-glow', `${fc}88`);
+    document.documentElement.style.setProperty('--bg-color', bc);
     document.body.style.backgroundColor = bc;
     if (this.dom.app) this.dom.app.style.backgroundColor = bc;
 
@@ -417,7 +419,7 @@ class PagerApp {
       this.dom.crtOverlay.style.display = this.config.scanlines ? 'block' : 'none';
     }
     if (this.dom.crtVignette) {
-      this.dom.crtVignette.style.display = this.config.vignette !== false;
+      this.dom.crtVignette.style.display = (this.config.vignette !== false) ? 'block' : 'none';
     }
     this.applyCustomColors(this.config.font_color, this.config.bg_color);
     this.applyOrientation(this.config.orientation || 'landscape');
@@ -845,8 +847,8 @@ class PagerApp {
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
       decode_speed: this.dom.selectDecodeSpeed.value,
       sound_type: this.dom.selectSoundType.value,
-      font_color: this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2fbffc',
-      bg_color: this.dom.pickerBgColor ? this.dom.pickerBgColor.value : '#000000',
+      font_color: this.config.font_color || '#2FBFFC',
+      bg_color: this.config.bg_color || '#000000',
       scanlines: this.dom.toggleScanlines.checked,
       vignette: this.dom.toggleVignette.checked,
     };
