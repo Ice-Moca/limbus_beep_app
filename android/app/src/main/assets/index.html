@@ -24,17 +24,12 @@
       <div class="corner corner-br"></div>
     </div>
 
-    <!-- 상단 상태바 -->
+    <!-- 극도로 정돈된 미니멀 상단 상태바 (불필요한 단계/상태 배지 제거) -->
     <header class="pager-header">
       <div class="header-left">
-        <span id="stage-badge" class="badge">STAGE 1 / 3</span>
-        <span id="msg-badge" class="badge badge-dim">MSG 1 / 2</span>
-      </div>
-      <div class="header-center">
         <span class="system-title">DANTE PDA PROTOCOL</span>
       </div>
       <div class="header-right">
-        <span id="status-badge" class="status-indicator">READY</span>
         <button id="btn-open-settings" class="icon-btn" title="설정 (S)">SETTING</button>
       </div>
     </header>
@@ -59,13 +54,10 @@
       </div>
     </main>
 
-    <!-- 하단 조작 가이드 -->
+    <!-- 극도로 정돈된 하단 조작 가이드 & 시계 -->
     <footer class="pager-footer">
       <div class="footer-left">
-        <span class="sys-code">LCB-SYS-2.0</span>
-      </div>
-      <div class="footer-center">
-        <span id="hint-text" class="hint-text">SPACE / 화면 터치: 진행 &nbsp;|&nbsp; R: 다시 재생 &nbsp;|&nbsp; S: 설정</span>
+        <span id="hint-text" class="hint-text">화면 터치 / SPACE: 진행 &nbsp;|&nbsp; R: 다시 재생 &nbsp;|&nbsp; S: 설정</span>
       </div>
       <div class="footer-right">
         <span id="clock-display" class="clock-text">--:--:--</span>
@@ -94,7 +86,7 @@
         </div>
       </div>
 
-      <!-- 세그먼트 탭 네비게이션 (대괄호 제거) -->
+      <!-- 세그먼트 탭 네비게이션 -->
       <div class="modal-tabs">
         <button class="tab-btn active" data-tab="tab-calendar">
           <span>캘린더 연동</span>
@@ -103,7 +95,7 @@
           <span>메시지 & STAGE 관리</span>
         </button>
         <button class="tab-btn" data-tab="tab-sound">
-          <span>사운드 & 화면 설정</span>
+          <span>화면 & 사운드 설정</span>
         </button>
       </div>
 
@@ -203,42 +195,26 @@
           </button>
         </div>
 
-        <!-- ── 탭 3: 사운드 & 화면 설정 ── -->
+        <!-- ── 탭 3: 화면 & 사운드 설정 ── -->
         <div id="tab-sound" class="tab-pane">
           
-          <!-- 볼륨 설정 카드 -->
+          <!-- 화면 방향 및 디스플레이 설정 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">AUDIO CONTROL</span>
-            </div>
-            
-            <div class="form-group">
-              <div class="slider-header">
-                <span class="slider-title">비프 사운드 볼륨</span>
-                <span id="label-volume" class="slider-val">80%</span>
-              </div>
-              <div class="input-with-btn">
-                <input type="range" id="slider-volume" min="0" max="100" value="80" class="cyber-slider">
-                <button id="btn-test-sound" class="btn btn-secondary">소리 테스트</button>
-              </div>
+              <span class="card-tag">DISPLAY & ORIENTATION</span>
             </div>
 
-            <div class="option-row" style="margin-top: 10px;">
+            <!-- 화면 방향 선택 (가로 모드 기본) -->
+            <div class="option-row">
               <div>
-                <div class="option-title">사운드 출력 엔진</div>
-                <div class="option-desc">재생할 오디오 소스를 선택합니다.</div>
+                <div class="option-title">화면 방향 (Screen Orientation)</div>
+                <div class="option-desc">가로 모드(기본) 또는 세로 모드로 화면을 고정합니다.</div>
               </div>
-              <select id="select-sound-type" class="cyber-select">
-                <option value="file" selected>기본 비프 파일 (beep.wav)</option>
-                <option value="synth">1000Hz 신디사이저 톤</option>
+              <select id="select-orientation" class="cyber-select">
+                <option value="landscape" selected>가로 모드 (Landscape) - 기본</option>
+                <option value="portrait">세로 모드 (Portrait)</option>
+                <option value="sensor">자동 회전 (Auto / Sensor)</option>
               </select>
-            </div>
-          </div>
-
-          <!-- 비주얼 및 이펙트 카드 -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <span class="card-tag">DISPLAY & DECRYPTION EFFECTS</span>
             </div>
 
             <div class="option-row">
@@ -288,11 +264,40 @@
             </div>
           </div>
 
+          <!-- 볼륨 설정 카드 -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <span class="card-tag">AUDIO CONTROL</span>
+            </div>
+            
+            <div class="form-group">
+              <div class="slider-header">
+                <span class="slider-title">비프 사운드 볼륨</span>
+                <span id="label-volume" class="slider-val">80%</span>
+              </div>
+              <div class="input-with-btn">
+                <input type="range" id="slider-volume" min="0" max="100" value="80" class="cyber-slider">
+                <button id="btn-test-sound" class="btn btn-secondary">소리 테스트</button>
+              </div>
+            </div>
+
+            <div class="option-row" style="margin-top: 10px;">
+              <div>
+                <div class="option-title">사운드 출력 엔진</div>
+                <div class="option-desc">재생할 오디오 소스를 선택합니다.</div>
+              </div>
+              <select id="select-sound-type" class="cyber-select">
+                <option value="file" selected>기본 비프 파일 (beep.wav)</option>
+                <option value="synth">1000Hz 신디사이저 톤</option>
+              </select>
+            </div>
+          </div>
+
         </div>
 
       </div>
 
-      <!-- 모달 푸터 액션 버튼 (대괄호 제거) -->
+      <!-- 모달 푸터 액션 버튼 -->
       <div class="modal-footer">
         <button id="btn-reset-default" class="btn btn-danger-outline">기본값 초기화</button>
         <div class="footer-right-btns">

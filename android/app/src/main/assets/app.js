@@ -17,11 +17,12 @@ const CIPHER_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*+-=?<>";
 // ── 기본 설정 및 초기 메시지 ──
 const DEFAULT_CONFIG = {
   volume: 80,
+  orientation: 'landscape', // landscape | portrait | sensor (가로 모드 기본)
   ics_url: '',
   auto_sync_min: 60,
-  decode_speed: 'normal', // fast: 0.5s, normal: 0.9s, slow: 1.5s
-  sound_type: 'file',     // file | synth
-  theme_color: 'cyan',    // cyan | amber | green
+  decode_speed: 'normal',   // fast: 0.5s, normal: 0.9s, slow: 1.5s
+  sound_type: 'file',       // file | synth
+  theme_color: 'cyan',      // cyan | amber | green
   scanlines: true,
   vignette: true,
   google_token: '',
@@ -87,9 +88,6 @@ class PagerApp {
   initDOM() {
     this.dom = {
       app: document.getElementById('pager-app'),
-      stageBadge: document.getElementById('stage-badge'),
-      msgBadge: document.getElementById('msg-badge'),
-      statusBadge: document.getElementById('status-badge'),
       displayDots: document.getElementById('display-dots'),
       displaySubLabel: document.getElementById('display-sub-label'),
       displayMain: document.getElementById('display-main'),
@@ -126,6 +124,7 @@ class PagerApp {
       stageCardsContainer: document.getElementById('stage-cards-container'),
       
       // 설정 필드
+      selectOrientation: document.getElementById('select-orientation'),
       inputIcsUrl: document.getElementById('input-ics-url'),
       selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
@@ -239,21 +238,26 @@ class PagerApp {
       this.applyThemeClass(e.target.value);
     });
 
-    // 9. Google 로그인 & 로그아웃
+    // 9. 화면 방향 변경
+    this.dom.selectOrientation.addEventListener('change', (e) => {
+      this.applyOrientation(e.target.value);
+    });
+
+    // 10. Google 로그인 & 로그아웃
     this.dom.btnGoogleLogin.addEventListener('click', () => this.handleGoogleSignIn());
     this.dom.btnGoogleLogout.addEventListener('click', () => this.handleGoogleSignOut());
 
-    // 10. 설정 저장 및 기본값 복원
+    // 11. 설정 저장 및 기본값 복원
     this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
     this.dom.btnResetDefault.addEventListener('click', () => this.resetDefaults());
 
-    // 11. 캘린더 즉시 동기화
+    // 12. 캘린더 즉시 동기화
     this.dom.btnSyncNow.addEventListener('click', () => {
       const url = this.dom.inputIcsUrl.value.trim();
       this.syncCalendar(url);
     });
 
-    // 12. 메시지 에디터 툴바
+    // 13. 메시지 에디터 툴바
     this.dom.btnLoadSample.addEventListener('click', () => {
       this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
       this.renderCustomStageCards();
@@ -266,7 +270,7 @@ class PagerApp {
       this.showToast("메시지 입력란을 모두 비웠습니다.");
     });
 
-    // 13. 작성된 STAGE 삐삐 적용
+    // 14. 작성된 STAGE 삐삐 적용
     this.dom.btnApplyCustom.addEventListener('click', () => this.applyCustomStages());
   }
 
@@ -311,6 +315,22 @@ class PagerApp {
     else if (themeName === 'green') document.body.classList.add('theme-green');
   }
 
+  applyOrientation(mode) {
+    const targetMode = mode || this.config.orientation || 'landscape';
+    // 1. Android Native Bridge 호출
+    if (window.AndroidBridge && typeof window.AndroidBridge.setOrientation === 'function') {
+      window.AndroidBridge.setOrientation(targetMode);
+    }
+    // 2. Web Screen Orientation API
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        if (targetMode === 'landscape') screen.orientation.lock('landscape').catch(() => {});
+        else if (targetMode === 'portrait') screen.orientation.lock('portrait').catch(() => {});
+        else if (targetMode === 'sensor') screen.orientation.unlock();
+      }
+    } catch (e) {}
+  }
+
   applySettings() {
     if (this.dom.crtOverlay) {
       this.dom.crtOverlay.style.display = this.config.scanlines ? 'block' : 'none';
@@ -319,6 +339,7 @@ class PagerApp {
       this.dom.crtVignette.style.display = this.config.vignette ? 'block' : 'none';
     }
     this.applyThemeClass(this.config.theme_color || 'cyan');
+    this.applyOrientation(this.config.orientation || 'landscape');
   }
 
   // ── Google OAuth 간편 로그인 연동 ──
@@ -449,7 +470,6 @@ class PagerApp {
         return { text: summary, time_info: timeInfo };
       });
 
-      // 3단계로 분할하여 메시지 저장 및 에디터에 즉시 자동 채움!
       const stages = this.distributeEventsTo3Stages(events);
       this.saveStoredMessages(stages);
       this.showToast(`오늘 일정 ${events.length}개를 가져와 [메시지 & STAGE]에 채웠습니다.`);
@@ -574,7 +594,6 @@ class PagerApp {
   // ── 상태 1: BEEPING ──
   startBeeping() {
     this.state = STATE.BEEPING;
-    this.updateBadges();
     this.playBeep();
 
     this.dom.progressBar.classList.remove('visible');
@@ -602,7 +621,6 @@ class PagerApp {
   startDecoding() {
     this.clearTimers();
     this.state = STATE.DECODING;
-    this.updateBadges();
 
     const msg = this.getCurrentMessage();
     if (!msg) {
@@ -650,7 +668,6 @@ class PagerApp {
   startRevealed() {
     this.clearTimers();
     this.state = STATE.REVEALED;
-    this.updateBadges();
 
     const msg = this.getCurrentMessage();
     if (!msg) return;
@@ -674,7 +691,6 @@ class PagerApp {
   startClear() {
     this.clearTimers();
     this.state = STATE.CLEAR;
-    this.updateBadges();
 
     this.dom.displayDots.textContent = "";
     this.dom.displaySubLabel.textContent = "";
@@ -689,7 +705,6 @@ class PagerApp {
   startComplete() {
     this.clearTimers();
     this.state = STATE.COMPLETE;
-    this.updateBadges();
 
     this.dom.displayDots.textContent = "━━ ALL CLEAR ━━";
     this.dom.displaySubLabel.textContent = "모든 메시지 수신 완료";
@@ -703,7 +718,6 @@ class PagerApp {
   updateDisplayIdle() {
     this.clearTimers();
     this.state = STATE.IDLE;
-    this.updateBadges();
 
     this.dom.displayDots.textContent = "";
     this.dom.displaySubLabel.textContent = "단테 삐삐 대기 중";
@@ -715,20 +729,6 @@ class PagerApp {
 
   updateDisplay() {
     this.updateDisplayIdle();
-  }
-
-  updateBadges() {
-    const totalStages = this.messages.length || 1;
-    const curStage = Math.min(this.currentStageIdx + 1, totalStages);
-    const stage = this.getCurrentStage();
-    const totalMsgs = stage && stage.messages ? stage.messages.length : 1;
-    const curMsg = Math.min(this.currentMsgIdx + 1, totalMsgs);
-
-    this.dom.stageBadge.textContent = `STAGE ${curStage} / ${totalStages}`;
-    this.dom.msgBadge.textContent = `MSG ${curMsg} / ${totalMsgs}`;
-
-    this.dom.statusBadge.textContent = this.state;
-    this.dom.statusBadge.className = `status-indicator status-${this.state.toLowerCase()}`;
   }
 
   // ── 시계 ──
@@ -746,6 +746,7 @@ class PagerApp {
 
   // ── 설정 모달 열기/닫기 ──
   openModal() {
+    this.dom.selectOrientation.value = this.config.orientation || 'landscape';
     this.dom.inputIcsUrl.value = this.config.ics_url || '';
     this.dom.sliderVolume.value = this.config.volume;
     this.dom.labelVolume.textContent = `${this.config.volume}%`;
@@ -783,7 +784,6 @@ class PagerApp {
       const card = document.createElement('div');
       card.className = 'stage-edit-card';
 
-      // 각 메시지를 줄바꿈으로 조합 (시간 정보가 있으면 괄호로 병합)
       const linesText = (stage.messages || []).map(m => {
         if (m.time_info && m.time_info !== "종일") {
           return `${m.time_info} | ${m.text}`;
@@ -802,7 +802,6 @@ class PagerApp {
         <textarea id="custom-stage-input-${idx}" rows="3" placeholder="예: 09:00 - 10:00 | 회의&#10;오후 업무">${linesText}</textarea>
       `;
 
-      // 개별 삭제 버튼 이벤트
       const delBtn = card.querySelector('.btn-del-stage');
       if (delBtn) {
         delBtn.addEventListener('click', (e) => {
@@ -854,6 +853,7 @@ class PagerApp {
 
   saveSettingsFromModal() {
     const newConfig = {
+      orientation: this.dom.selectOrientation.value || 'landscape',
       ics_url: this.dom.inputIcsUrl.value.trim(),
       volume: parseInt(this.dom.sliderVolume.value, 10),
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
@@ -904,7 +904,6 @@ class PagerApp {
       const events = this.parseIcsText(icsText);
       const stages = this.distributeEventsTo3Stages(events.map(e => this.formatEvent(e)));
 
-      // 3단계로 분할하여 메시지 저장 및 에디터에 즉시 자동 채움!
       this.saveStoredMessages(stages);
       this.config.ics_url = url;
       this.saveConfig(this.config);
@@ -1018,7 +1017,7 @@ class PagerApp {
       return [{ stage: 1, messages: [{ text: "오늘 등록된 일정이 없습니다.", time_info: "오늘" }] }];
     }
 
-    const n = 3; // 캘린더 연동은 3단계 고정
+    const n = 3;
     const base = Math.floor(formattedEvents.length / n);
     const extra = formattedEvents.length % n;
     const stages = [];
