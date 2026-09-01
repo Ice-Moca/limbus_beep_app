@@ -186,17 +186,19 @@ class PagerApp {
     });
 
     // 4. 클립보드 붙여넣기 버튼
-    this.dom.btnPasteClipboard.addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text) {
-          this.dom.inputIcsUrl.value = text.trim();
-          this.showToast("클립보드 내용을 붙여넣었습니다.");
+    if (this.dom.btnPasteClipboard) {
+      this.dom.btnPasteClipboard.addEventListener('click', async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text) {
+            this.dom.inputIcsUrl.value = text.trim();
+            this.showToast("클립보드 내용을 붙여넣었습니다.");
+          }
+        } catch (err) {
+          this.showToast("클립보드 권한이 필요합니다. 직접 붙여넣으세요.");
         }
-      } catch (err) {
-        this.showToast("클립보드 권한이 필요합니다. 직접 붙여넣으세요.");
-      }
-    });
+      });
+    }
 
     // 5. 모달 탭 전환
     this.dom.tabBtns.forEach(btn => {
@@ -784,68 +786,105 @@ class PagerApp {
     this.dom.modal.classList.add('hidden');
   }
 
-  // ── 동적 STAGE 카드 렌더링 (각 STAGE 메시지 직접 수정 가능) ──
+  // ── 동적 STAGE 카드 렌더링 (각 메시지가 개별 카드로 분리됨) ──
   renderCustomStageCards() {
     this.dom.stageCardsContainer.innerHTML = '';
     this.dom.labelCustomStageCount.textContent = `${this.customStages.length} STAGES`;
 
     const pillClasses = ['stage-pill-cyan', 'stage-pill-amber', 'stage-pill-green'];
 
-    this.customStages.forEach((stage, idx) => {
-      const stageNum = idx + 1;
-      const pillClass = pillClasses[idx % pillClasses.length];
-      const card = document.createElement('div');
-      card.className = 'stage-edit-card';
+    this.customStages.forEach((stage, sIdx) => {
+      const stageNum = sIdx + 1;
+      const pillClass = pillClasses[sIdx % pillClasses.length];
+      const stageCard = document.createElement('div');
+      stageCard.className = 'stage-edit-card';
 
-      const linesText = (stage.messages || []).map(m => {
-        if (m.time_info && m.time_info !== "종일") {
-          return `${m.time_info} | ${m.text}`;
-        }
-        return m.text;
-      }).join('\n');
+      const messages = stage.messages || [];
 
-      card.innerHTML = `
+      let msgCardsHtml = '';
+      messages.forEach((m, mIdx) => {
+        msgCardsHtml += `
+          <div class="msg-card-item" data-sidx="${sIdx}" data-midx="${mIdx}">
+            <div class="msg-card-row">
+              <input type="text" class="msg-time-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.time_info || ''}" placeholder="시간 (예: 09:00 - 10:00)">
+              <button class="btn-del-msg" data-sidx="${sIdx}" data-midx="${mIdx}" title="메시지 삭제">&times;</button>
+            </div>
+            <input type="text" class="msg-text-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.text || ''}" placeholder="메시지 내용 입력">
+          </div>
+        `;
+      });
+
+      stageCard.innerHTML = `
         <div class="stage-edit-header">
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="stage-pill ${pillClass}">STAGE ${stageNum}</span>
-            <span class="stage-sub-hint">메시지 ${(stage.messages || []).length}개 (줄바꿈으로 구분)</span>
+            <span class="stage-sub-hint">메시지 ${messages.length}개</span>
           </div>
-          ${this.customStages.length > 1 ? `<button class="btn-del-stage" data-idx="${idx}">삭제</button>` : ''}
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="btn-add-msg-to-stage btn-sm-text" data-sidx="${sIdx}">+ 메시지 추가</button>
+            ${this.customStages.length > 1 ? `<button class="btn-del-stage" data-sidx="${sIdx}">삭제</button>` : ''}
+          </div>
         </div>
-        <textarea id="custom-stage-input-${idx}" rows="3" placeholder="예: 09:00 - 10:00 | 회의&#10;오후 업무">${linesText}</textarea>
+        <div class="stage-msg-list" id="stage-msg-list-${sIdx}">
+          ${msgCardsHtml || '<div class="empty-msg-notice">등록된 메시지가 없습니다. [+ 메시지 추가]를 눌러 추가하세요.</div>'}
+        </div>
       `;
 
-      const delBtn = card.querySelector('.btn-del-stage');
-      if (delBtn) {
-        delBtn.addEventListener('click', (e) => {
+      // STAGE 삭제 버튼
+      const delStageBtn = stageCard.querySelector('.btn-del-stage');
+      if (delStageBtn) {
+        delStageBtn.addEventListener('click', (e) => {
           this.syncCustomBufferFromDOM();
-          const targetIdx = parseInt(e.target.dataset.idx, 10);
+          const targetIdx = parseInt(e.target.dataset.sidx, 10);
           this.customStages.splice(targetIdx, 1);
           this.renderCustomStageCards();
           this.showToast(`STAGE 삭제됨 (현재 ${this.customStages.length}개)`);
         });
       }
 
-      this.dom.stageCardsContainer.appendChild(card);
+      // 메시지 추가 버튼
+      const addMsgBtn = stageCard.querySelector('.btn-add-msg-to-stage');
+      if (addMsgBtn) {
+        addMsgBtn.addEventListener('click', (e) => {
+          this.syncCustomBufferFromDOM();
+          const targetSIdx = parseInt(e.target.dataset.sidx, 10);
+          if (!this.customStages[targetSIdx].messages) this.customStages[targetSIdx].messages = [];
+          this.customStages[targetSIdx].messages.push({ text: `새 메시지`, time_info: "" });
+          this.renderCustomStageCards();
+        });
+      }
+
+      // 개별 메시지 삭제 버튼
+      stageCard.querySelectorAll('.btn-del-msg').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          this.syncCustomBufferFromDOM();
+          const targetSIdx = parseInt(e.target.dataset.sidx, 10);
+          const targetMIdx = parseInt(e.target.dataset.midx, 10);
+          this.customStages[targetSIdx].messages.splice(targetMIdx, 1);
+          this.renderCustomStageCards();
+        });
+      });
+
+      this.dom.stageCardsContainer.appendChild(stageCard);
     });
   }
 
   syncCustomBufferFromDOM() {
-    this.customStages.forEach((stage, idx) => {
-      const textarea = document.getElementById(`custom-stage-input-${idx}`);
-      if (textarea) {
-        const rawLines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
-        stage.stage = idx + 1;
-        stage.messages = rawLines.map(line => {
-          if (line.includes('|')) {
-            const parts = line.split('|');
-            return {
-              time_info: parts[0].trim(),
-              text: parts.slice(1).join('|').trim()
-            };
+    this.customStages.forEach((stage, sIdx) => {
+      stage.stage = sIdx + 1;
+      const msgItems = document.querySelectorAll(`.msg-card-item[data-sidx="${sIdx}"]`);
+      if (msgItems && msgItems.length > 0) {
+        const parsedMessages = [];
+        msgItems.forEach(item => {
+          const timeInput = item.querySelector('.msg-time-input');
+          const textInput = item.querySelector('.msg-text-input');
+          const time_info = timeInput ? timeInput.value.trim() : "";
+          const text = textInput ? textInput.value.trim() : "";
+          if (text || time_info) {
+            parsedMessages.push({ text: text || "(빈 메시지)", time_info });
           }
-          return { text: line, time_info: "" };
         });
+        stage.messages = parsedMessages;
       }
     });
   }
