@@ -977,7 +977,7 @@ class PagerApp {
     }
   }
 
-  // ── 한국 표준시(KST) 오늘 일정 파싱 ──
+  // ── 한국 표준시(KST) 순수 오늘 일정 파싱 ──
   parseIcsText(icsText) {
     const now = new Date();
     // KST 시간 계산 (UTC + 9)
@@ -985,9 +985,6 @@ class PagerApp {
     const todayY = kst.getFullYear();
     const todayM = kst.getMonth() + 1;
     const todayD = kst.getDate();
-    const todayDayOfWeek = kst.getDay(); // 0=일, 1=월, 2=화, ...
-    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-    const todayDayName = dayNames[todayDayOfWeek];
 
     const events = [];
     const cleanIcs = icsText.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').replace(/\r[ \t]/g, '');
@@ -1003,7 +1000,7 @@ class PagerApp {
         curEvent = {};
       } else if (line === "END:VEVENT") {
         inEvent = false;
-        if (this.isEventToday(curEvent, todayY, todayM, todayD, todayDayName)) {
+        if (this.isEventToday(curEvent, todayY, todayM, todayD)) {
           events.push(curEvent);
         }
       } else if (inEvent && line.includes(":")) {
@@ -1019,33 +1016,11 @@ class PagerApp {
     return events;
   }
 
-  isEventToday(ev, y, m, d, todayDayName) {
+  isEventToday(ev, y, m, d) {
     const dtstart = ev.DTSTART || "";
     if (!dtstart) return false;
 
-    // 1. 반복 일정 (RRULE)
-    if (ev.RRULE) {
-      const rrule = ev.RRULE.toUpperCase();
-      if (rrule.includes("FREQ=DAILY")) return true;
-      if (rrule.includes("FREQ=WEEKLY")) {
-        const byDayMatch = rrule.match(/BYDAY=([^;]+)/);
-        if (byDayMatch) {
-          if (byDayMatch[1].includes(todayDayName)) return true;
-        } else {
-          const ey = parseInt(dtstart.substr(0, 4), 10);
-          const em = parseInt(dtstart.substr(4, 2), 10);
-          const ed = parseInt(dtstart.substr(6, 2), 10);
-          const origDate = new Date(Date.UTC(ey, em - 1, ed));
-          if (origDate.getUTCDay() === new Date(Date.UTC(y, m - 1, d)).getUTCDay()) return true;
-        }
-      }
-      if (rrule.includes("FREQ=MONTHLY")) {
-        const ed = parseInt(dtstart.substr(6, 2), 10);
-        if (ed === d) return true;
-      }
-    }
-
-    // 2. 종일 일정 (YYYYMMDD)
+    // 1. 종일 일정 (YYYYMMDD) - 오늘과 같은 년도, 같은 월, 같은 일
     if (dtstart.length === 8) {
       const ey = parseInt(dtstart.substr(0, 4), 10);
       const em = parseInt(dtstart.substr(4, 2), 10);
@@ -1053,20 +1028,23 @@ class PagerApp {
       return ey === y && em === m && ed === d;
     }
 
-    // 3. 시간 지정 일정 (YYYYMMDDTHHMMSS)
+    // 2. 시간 지정 일정 (YYYYMMDDTHHMMSS)
     if (dtstart.includes("T")) {
       const raw = dtstart.replace("Z", "");
-      let ey = parseInt(raw.substr(0, 4), 10);
-      let em = parseInt(raw.substr(4, 2), 10);
-      let ed = parseInt(raw.substr(6, 2), 10);
-      let eh = parseInt(raw.substr(9, 2), 10);
+      const ey = parseInt(raw.substr(0, 4), 10);
+      const em = parseInt(raw.substr(4, 2), 10);
+      const ed = parseInt(raw.substr(6, 2), 10);
+      const eh = parseInt(raw.substr(9, 2), 10) || 0;
+      const emn = parseInt(raw.substr(11, 2), 10) || 0;
 
       if (dtstart.endsWith("Z")) {
-        // UTC -> KST (+9h)
-        const utcDate = new Date(Date.UTC(ey, em - 1, ed, eh));
+        // UTC 시간 -> 한국 시간(KST, UTC+9)으로 환산 후 오늘(y년 m월 d일)과 일치하는지 비교
+        const utcDate = new Date(Date.UTC(ey, em - 1, ed, eh, emn));
         const kstDate = new Date(utcDate.getTime() + 9 * 3600 * 1000);
         return kstDate.getUTCFullYear() === y && (kstDate.getUTCMonth() + 1) === m && kstDate.getUTCDate() === d;
       }
+
+      // 로컬 시간
       return ey === y && em === m && ed === d;
     }
 
