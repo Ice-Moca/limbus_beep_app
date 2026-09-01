@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Limbus Beep - 단테 삐삐 시뮬레이터</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Google Identity Services SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <!-- CRT 스캔라인 & 비네팅 오버레이 -->
@@ -80,92 +82,92 @@
       <div class="modal-header">
         <div class="modal-title-group">
           <div class="modal-title">
-            <span class="title-prefix">[CONFIG]</span>
+            <span class="title-tag">[CONFIG]</span>
             <span>단테 삐삐 환경 설정</span>
-            <span class="version-tag">v2.0</span>
+            <span class="version-pill">v2.0</span>
           </div>
-          <span class="modal-subtitle">DANTE PDA SYSTEM CONFIGURATION</span>
+          <span class="modal-subtitle">DANTE PDA CONFIGURATION SYSTEM</span>
         </div>
         <div class="modal-header-actions">
           <span class="esc-badge">[ ESC: CLOSE ]</span>
-          <button id="btn-close-settings" class="close-btn" title="CLOSE">[X]</button>
+          <button id="btn-close-settings" class="close-btn" title="닫기">[X]</button>
         </div>
       </div>
 
-      <!-- 모달 탭 세그먼트 네비게이션 -->
+      <!-- 세그먼트 탭 네비게이션 -->
       <div class="modal-tabs">
         <button class="tab-btn active" data-tab="tab-calendar">
           <span>[ 캘린더 연동 ]</span>
         </button>
-        <button class="tab-btn" data-tab="tab-oauth">
-          <span>[ GOOGLE OAUTH2 ]</span>
-        </button>
         <button class="tab-btn" data-tab="tab-messages">
-          <span>[ 메시지 & 단계 설정 ]</span>
+          <span>[ 메시지 & STAGE 관리 ]</span>
         </button>
         <button class="tab-btn" data-tab="tab-sound">
-          <span>[ 사운드 & 화면 ]</span>
+          <span>[ 사운드 & 화면 설정 ]</span>
         </button>
       </div>
 
       <!-- 모달 본문 영역 -->
       <div class="modal-body">
         
-        <!-- ── 탭 1: iCal 캘린더 연동 ── -->
+        <!-- ── 탭 1: 캘린더 연동 (Google 로그인 및 iCal) ── -->
         <div id="tab-calendar" class="tab-pane active">
           
-          <div class="form-group">
-            <div class="label-row">
-              <label for="input-ics-url">Google Calendar 비공개 iCal (ICS) 주소</label>
-              <button id="btn-paste-clipboard" class="btn-text-action">[ 클립보드 붙여넣기 ]</button>
+          <!-- 구글 간편 로그인 연동 카드 -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <span class="card-tag">[ GOOGLE 계정 간편 로그인 연동 ]</span>
             </div>
+            <p class="section-desc">
+              구글 계정으로 로그인하여 오늘의 구글 캘린더 일정을 원클릭으로 동기화합니다 (3단계 자동 분할).
+            </p>
+            <div class="oauth-action-row">
+              <button id="btn-google-login" class="btn btn-google">
+                <span class="btn-g-logo">G</span>
+                <span id="google-login-text">Google 계정으로 로그인하여 동기화</span>
+              </button>
+              <button id="btn-google-logout" class="btn btn-danger-outline hidden">[ 연결 해제 ]</button>
+            </div>
+            <div id="oauth-account-info" class="oauth-account-status hidden">
+              <span class="status-dot-active"></span>
+              <span id="oauth-account-email">연동 완료</span>
+            </div>
+          </div>
+
+          <!-- 또는 비공개 iCal 주소 연동 -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <span class="card-tag">[ iCal 비공개 URL 연동 ]</span>
+              <button id="btn-paste-clipboard" class="btn-link">[ 클립보드 붙여넣기 ]</button>
+            </div>
+            <p class="section-desc">
+              Google 캘린더 웹 > 캘린더 설정 > <strong>'iCal 형식의 비공개 주소'</strong> URL을 입력하여 동기화합니다.
+            </p>
             <div class="input-with-btn">
               <input type="text" id="input-ics-url" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" autocomplete="off" spellcheck="false">
               <button id="btn-sync-now" class="btn btn-primary">[ 즉시 동기화 ]</button>
             </div>
-            <div class="guide-accordion">
-              <details>
-                <summary>[+] iCal 비공개 주소 확인 방법</summary>
-                <ol class="guide-steps">
-                  <li>Google Calendar 접속 후 연동할 캘린더 우측의 <strong>[설정 및 공유]</strong> 선택</li>
-                  <li>페이지를 스크롤하여 <strong>'iCal 형식의 비공개 주소'</strong> URL을 복사하여 입력합니다.</li>
-                </ol>
-              </details>
-            </div>
           </div>
 
-          <!-- 동기화 단계 수 설정 -->
-          <div class="form-group row-flex">
-            <div>
-              <div class="option-title">캘린더 분할 단계 수 (Stage Count)</div>
-              <div class="option-desc">오늘의 일정을 균등하게 나눌 단계 수를 지정합니다.</div>
-            </div>
-            <div class="stage-stepper">
-              <button id="btn-dec-cal-stages" class="btn-step">-</button>
-              <span id="label-cal-stage-count" class="step-value">3</span>
-              <button id="btn-inc-cal-stages" class="btn-step">+</button>
-            </div>
-          </div>
-
-          <!-- 현재 로드된 일정 상태 & 프리뷰 카드 -->
+          <!-- 현재 로드된 오늘 일정 요약 카드 (3단계 고정) -->
           <div class="preview-card">
             <div class="preview-header">
               <div class="preview-title">
                 <span class="dot-indicator"></span>
-                <span>오늘의 동기화 일정 프리뷰</span>
+                <span>오늘의 3단계 분할 일정 프리뷰</span>
               </div>
-              <span id="sync-stage-count" class="preview-badge">3개 단계 로드됨</span>
+              <span id="sync-stage-count" class="preview-badge">3 STAGES LOADED</span>
             </div>
             <div id="calendar-preview-list" class="preview-list">
-              <!-- JS에서 동적으로 일정 목록 렌더링 -->
+              <!-- JS에서 동적으로 3단계 일정 목록 렌더링 -->
             </div>
           </div>
 
           <!-- 자동 동기화 주기 -->
-          <div class="form-group row-flex">
+          <div class="option-row">
             <div>
-              <div class="option-title">백그라운드 자동 동기화 주기</div>
-              <div class="option-desc">설정된 주기마다 캘린더 일정을 자동 갱신합니다.</div>
+              <div class="option-title">백그라운드 자동 캘린더 갱신 주기</div>
+              <div class="option-desc">주기적으로 캘린더의 최신 일정을 자동 동기화합니다.</div>
             </div>
             <select id="select-auto-sync" class="cyber-select">
               <option value="0">자동 동기화 끄기</option>
@@ -178,118 +180,89 @@
 
         </div>
 
-        <!-- ── 탭 2: Google OAuth 2.0 직접 연동 ── -->
-        <div id="tab-oauth" class="tab-pane">
-          
-          <div class="form-card">
-            <div class="form-card-title">[ GOOGLE OAUTH 2.0 DIRECT CALENDAR SYNC ]</div>
-            
-            <p class="form-help">
-              Google Cloud Console에서 발급받은 OAuth 2.0 Client ID를 통해 브라우저 로그인으로 오늘 일정을 직접 동기화합니다.
-            </p>
-
-            <div class="form-group" style="margin-top: 8px;">
-              <label for="input-oauth-client-id">Google OAuth Client ID</label>
-              <input type="text" id="input-oauth-client-id" placeholder="xxxxxxxxxxxx.apps.googleusercontent.com" autocomplete="off">
-            </div>
-
-            <div class="form-group row-flex" style="margin-top: 6px;">
-              <div>
-                <div class="option-title">계정 인증 상태</div>
-                <div id="oauth-status-text" class="option-desc">미연동 (로그인 필요)</div>
-              </div>
-              <div class="btn-group">
-                <button id="btn-oauth-login" class="btn btn-primary">[ GOOGLE 계정 로그인 & 동기화 ]</button>
-                <button id="btn-oauth-logout" class="btn btn-danger-outline hidden">[ 로그아웃 ]</button>
-              </div>
-            </div>
-
-            <div class="guide-box">
-              <div class="guide-title">[!] Google Cloud OAuth 설정 안내:</div>
-              <div class="guide-desc">
-                • 승인된 자바스크립트 원본: <code>http://localhost:8765</code>, <code>http://127.0.0.1:8765</code><br>
-                • 승인된 리디렉션 URI: <code>http://localhost:8765/index.html</code><br>
-                • 스코프: <code>https://www.googleapis.com/auth/calendar.readonly</code>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- ── 탭 3: 메시지 & 단계 직접 편집 ── -->
+        <!-- ── 탭 2: 메시지 & 사용자 정의 STAGE 관리 ── -->
         <div id="tab-messages" class="tab-pane">
           
-          <div class="messages-toolbar">
-            <div class="stage-count-bar">
-              <span class="option-title">현재 단계 수:</span>
-              <span id="label-custom-stage-count" class="badge">3 STAGES</span>
+          <div class="messages-top-bar">
+            <div class="stage-control-group">
+              <span class="stage-total-label">총 단계 수:</span>
+              <span id="label-custom-stage-count" class="stage-count-badge">3 STAGES</span>
               <button id="btn-add-stage" class="btn btn-sm btn-primary">[ + STAGE 추가 ]</button>
-              <button id="btn-remove-stage" class="btn btn-sm btn-danger">[ - 마지막 STAGE 삭제 ]</button>
             </div>
-            <div class="toolbar-btns">
+            <div class="sample-actions">
               <button id="btn-load-sample" class="btn btn-sm btn-secondary">[ 기본 예시 불러오기 ]</button>
               <button id="btn-clear-messages" class="btn btn-sm btn-danger-outline">[ 전체 비우기 ]</button>
             </div>
           </div>
 
-          <div id="stage-cards-container" class="stage-editor-grid">
-            <!-- JS에서 동적으로 단계 카드들이 렌더링됩니다 -->
+          <p class="section-desc" style="margin-bottom: 8px;">
+            원하는 만큼 STAGE를 추가하고 각 단계별 메시지를 작성하세요. 작성된 내용은 항상 저장됩니다.
+          </p>
+
+          <!-- 동적으로 생성되는 각 STAGE 카드 컨테이너 -->
+          <div id="stage-cards-container" class="stage-cards-scroll">
+            <!-- JS에서 렌더링 -->
           </div>
 
-          <button id="btn-apply-custom-messages" class="btn btn-primary btn-block">[ 편집한 단계 및 메시지로 삐삐 즉시 적용 ]</button>
+          <button id="btn-apply-custom-messages" class="btn btn-primary btn-block" style="margin-top: 10px;">
+            [ 작성한 STAGE 및 메시지로 삐삐 즉시 적용 ]
+          </button>
         </div>
 
-        <!-- ── 탭 4: 사운드 & 화면 설정 ── -->
+        <!-- ── 탭 3: 사운드 & 화면 설정 ── -->
         <div id="tab-sound" class="tab-pane">
           
-          <!-- 볼륨 설정 -->
-          <div class="form-card">
-            <div class="form-card-title">[ AUDIO CONFIGURATION ]</div>
+          <!-- 볼륨 설정 카드 -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <span class="card-tag">[ AUDIO CONTROL ]</span>
+            </div>
+            
             <div class="form-group">
               <div class="slider-header">
-                <span class="slider-title">비프음 재생 음량</span>
+                <span class="slider-title">비프 사운드 볼륨</span>
                 <span id="label-volume" class="slider-val">80%</span>
               </div>
               <div class="input-with-btn">
                 <input type="range" id="slider-volume" min="0" max="100" value="80" class="cyber-slider">
-                <button id="btn-test-sound" class="btn btn-secondary">[ TEST BEEP ]</button>
+                <button id="btn-test-sound" class="btn btn-secondary">[ 소리 테스트 ]</button>
               </div>
             </div>
 
-            <div class="form-group row-flex" style="margin-top: 10px;">
+            <div class="option-row" style="margin-top: 10px;">
               <div>
-                <div class="option-title">사운드 엔진 프리셋</div>
-                <div class="option-desc">사운드 재생 소스를 선택합니다.</div>
+                <div class="option-title">사운드 출력 엔진</div>
+                <div class="option-desc">재생할 오디오 소스를 선택합니다.</div>
               </div>
               <select id="select-sound-type" class="cyber-select">
                 <option value="file" selected>기본 비프 파일 (beep.wav)</option>
-                <option value="synth">1000Hz 신디사이저 비프</option>
+                <option value="synth">1000Hz 신디사이저 톤</option>
               </select>
             </div>
           </div>
 
-          <!-- 복호화 속도 및 테마 -->
-          <div class="form-card">
-            <div class="form-card-title">[ VISUAL & DECRYPTION EFFECTS ]</div>
-            
-            <div class="form-group row-flex">
+          <!-- 비주얼 및 이펙트 카드 -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <span class="card-tag">[ DISPLAY & DECRYPTION EFFECTS ]</span>
+            </div>
+
+            <div class="option-row">
               <div>
-                <div class="option-title">복호화(Decryption) 진행 속도</div>
+                <div class="option-title">복호화(Decryption) 애니메이션 속도</div>
                 <div class="option-desc">글리치 텍스트가 해독되는 시간입니다.</div>
               </div>
               <select id="select-decode-speed" class="cyber-select">
-                <option value="fast">빠르게 (0.5s)</option>
-                <option value="normal" selected>보통 (0.9s)</option>
-                <option value="slow">느리게 (1.5s)</option>
+                <option value="fast">빠르게 (0.5초)</option>
+                <option value="normal" selected>보통 (0.9초)</option>
+                <option value="slow">느리게 (1.5초)</option>
               </select>
             </div>
 
-            <div class="divider"></div>
-
-            <div class="form-group row-flex">
+            <div class="option-row">
               <div>
-                <div class="option-title">CRT 스캔라인 효과 (Scanlines)</div>
-                <div class="option-desc">레트로 브라운관 가로 줄무늬를 표시합니다.</div>
+                <div class="option-title">CRT 스캔라인 가로 줄무늬 (Scanlines)</div>
+                <div class="option-desc">레트로 브라운관 모니터 효과를 켜거나 끕니다.</div>
               </div>
               <label class="switch">
                 <input type="checkbox" id="toggle-scanlines" checked>
@@ -297,10 +270,10 @@
               </label>
             </div>
 
-            <div class="form-group row-flex">
+            <div class="option-row">
               <div>
-                <div class="option-title">CRT 비네팅 효과 (Vignette)</div>
-                <div class="option-desc">화면 외곽 음영으로 터미널 깊이감을 표현합니다.</div>
+                <div class="option-title">CRT 외곽 비네팅 음영 (Vignette)</div>
+                <div class="option-desc">모니터 가장자리 어두운 음영 효과를 적용합니다.</div>
               </div>
               <label class="switch">
                 <input type="checkbox" id="toggle-vignette" checked>
@@ -308,12 +281,10 @@
               </label>
             </div>
 
-            <div class="divider"></div>
-
-            <div class="form-group row-flex">
+            <div class="option-row">
               <div>
                 <div class="option-title">인터페이스 네온 테마 컬러</div>
-                <div class="option-desc">터미널의 주 발광 색상을 변경합니다.</div>
+                <div class="option-desc">단테 삐삐의 발광 색상 프리셋을 선택합니다.</div>
               </div>
               <select id="select-theme-color" class="cyber-select">
                 <option value="cyan" selected>[ CYAN ] 단테 시안 (Cyan Phosphor)</option>
@@ -329,7 +300,7 @@
 
       <!-- 모달 푸터 액션 버튼 -->
       <div class="modal-footer">
-        <button id="btn-reset-default" class="btn btn-danger-outline">[ 초기화 ]</button>
+        <button id="btn-reset-default" class="btn btn-danger-outline">[ 기본값 초기화 ]</button>
         <div class="footer-right-btns">
           <button id="btn-cancel-settings" class="btn btn-secondary">[ 취소 ]</button>
           <button id="btn-save-settings" class="btn btn-primary">[ 설정 저장 및 닫기 ]</button>
