@@ -101,47 +101,53 @@
         <!-- ── 탭 1: 캘린더 연동 ── -->
         <div id="tab-calendar" class="tab-pane active">
           
-          <!-- 구글 간편 로그인 연동 카드 -->
+          <!-- 구글 계정 OAuth 연동 카드 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">GOOGLE 계정 간편 로그인</span>
+              <span class="card-tag">GOOGLE 캘린더 원클릭 로그인 연동</span>
             </div>
             <p class="section-desc">
-              구글 계정으로 로그인하면 오늘 캘린더 일정을 자동으로 가져와 3단계로 분할하여 <strong>'메시지 & STAGE 관리'</strong>에 즉시 채워줍니다.
+              구글 계정으로 로그인하여 오늘의 캘린더 일정을 3단계 메시지로 자동 동기화합니다.
             </p>
-            <div class="oauth-action-row">
+
+            <div class="form-group">
+              <label for="input-google-client-id">Google Cloud OAuth Client ID</label>
+              <input type="text" id="input-google-client-id" placeholder="Google Cloud 발급 Client ID를 입력하세요 (xxxx.apps.googleusercontent.com)" autocomplete="off" spellcheck="false">
+            </div>
+
+            <div class="oauth-action-row" style="margin-top: 4px;">
               <button id="btn-google-login" class="btn btn-google">
                 <span class="btn-g-logo">G</span>
                 <span id="google-login-text">Google 계정으로 로그인하여 동기화</span>
               </button>
               <button id="btn-google-logout" class="btn btn-danger-outline hidden">연결 해제</button>
             </div>
+
             <div id="oauth-account-info" class="oauth-account-status hidden">
               <span class="status-dot-active"></span>
               <span id="oauth-account-email">연동 완료</span>
             </div>
+
+            <div class="info-tip-box" style="margin-top: 6px;">
+              <div class="tip-title">Google OAuth 404 안내</div>
+              <div class="tip-desc">
+                Google의 보안 정책상, 등록되지 않은 임의의 Client ID는 404/401 에러를 반환합니다. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:var(--cyan-primary);text-decoration:underline;">Google Cloud Console</a>에서 무료로 발급받은 본인의 웹 Client ID를 위에 입력하시면 즉시 정상 로그인 팝업이 작동합니다.
+              </div>
+            </div>
           </div>
 
-          <!-- iCal 비공개 URL 연동 -->
+          <!-- iCal 비공개 URL 연동 (선택 사항) -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">iCal 비공개 URL 연동</span>
+              <span class="card-tag">iCal 비공개 URL 연동 (Client ID 없이 즉시 동기화)</span>
               <button id="btn-paste-clipboard" class="btn-link">클립보드 붙여넣기</button>
             </div>
             <p class="section-desc">
-              Google 캘린더 설정에서 복사한 <strong>'iCal 형식의 비공개 주소'</strong> URL을 입력하여 동기화할 수 있습니다.
+              Google Cloud 설정 없이 <strong>'iCal 비공개 주소'</strong>로 1초 만에 즉시 동기화할 수 있습니다.
             </p>
             <div class="input-with-btn">
               <input type="text" id="input-ics-url" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" autocomplete="off" spellcheck="false">
               <button id="btn-sync-now" class="btn btn-primary">즉시 동기화</button>
-            </div>
-          </div>
-
-          <!-- 동기화 안내 팁 카드 -->
-          <div class="info-tip-box">
-            <div class="tip-title">알림</div>
-            <div class="tip-desc">
-              동기화된 일정 메시지는 <strong>[메시지 & STAGE 관리]</strong> 탭에 자동으로 3단계로 배치되며, 각 메시지를 유저가 원하는 대로 직접 수정하거나 단계를 추가할 수 있습니다.
             </div>
           </div>
 

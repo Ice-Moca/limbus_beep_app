@@ -25,6 +25,7 @@ const DEFAULT_CONFIG = {
   theme_color: 'cyan',      // cyan | amber | green
   scanlines: true,
   vignette: true,
+  google_client_id: '',
   google_token: '',
   google_email: '',
 };
@@ -109,6 +110,7 @@ class PagerApp {
       btnTestSound: document.getElementById('btn-test-sound'),
       
       // Google 로그인 관련
+      inputGoogleClientId: document.getElementById('input-google-client-id'),
       btnGoogleLogin: document.getElementById('btn-google-login'),
       btnGoogleLogout: document.getElementById('btn-google-logout'),
       googleLoginText: document.getElementById('google-login-text'),
@@ -366,9 +368,20 @@ class PagerApp {
       return;
     }
 
+    const clientId = (this.dom.inputGoogleClientId?.value || this.config.google_client_id || '').trim();
+    if (!clientId || clientId.length < 10) {
+      alert("Google Cloud Console에서 발급받은 OAuth Client ID를 입력해주세요.\n\n(또는 하단의 iCal 비공개 URL을 이용하시면 Client ID 없이 1초 만에 즉시 동기화됩니다.)");
+      this.dom.inputGoogleClientId?.focus();
+      return;
+    }
+
+    this.config.google_client_id = clientId;
+    this.saveConfig(this.config);
+
     try {
-      const clientId = "889981242318-q7v5hph7l7q5r34p8c23h4kfffl9e7da.apps.googleusercontent.com";
-      const redirectUri = window.location.origin ? `${window.location.origin}${window.location.pathname}` : 'http://localhost:8765/index.html';
+      const redirectUri = window.location.origin && !window.location.origin.startsWith('file:') 
+        ? `${window.location.origin}${window.location.pathname}` 
+        : 'http://localhost:8765/index.html';
       const scope = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email';
 
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&prompt=consent`;
@@ -394,22 +407,7 @@ class PagerApp {
             if (token) {
               popup.close();
               clearInterval(pollTimer);
-              this.config.google_token = token;
-              
-              try {
-                const userResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-                  headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (userResp.ok) {
-                  const userData = await userResp.json();
-                  this.config.google_email = userData.email || '';
-                }
-              } catch (e) {}
-
-              this.saveConfig(this.config);
-              this.updateGoogleUI();
-              this.showToast("Google 계정 로그인 성공!");
-              await this.fetchGoogleCalendarApi(token);
+              await this.onOAuthTokenReceived(token);
             }
           }
         } catch (e) {}
@@ -767,6 +765,9 @@ class PagerApp {
   // ── 설정 모달 열기/닫기 ──
   openModal() {
     this.dom.selectOrientation.value = this.config.orientation || 'landscape';
+    if (this.dom.inputGoogleClientId) {
+      this.dom.inputGoogleClientId.value = this.config.google_client_id || '';
+    }
     this.dom.inputIcsUrl.value = this.config.ics_url || '';
     this.dom.sliderVolume.value = this.config.volume;
     this.dom.labelVolume.textContent = `${this.config.volume}%`;
@@ -874,6 +875,7 @@ class PagerApp {
   saveSettingsFromModal() {
     const newConfig = {
       orientation: this.dom.selectOrientation.value || 'landscape',
+      google_client_id: (this.dom.inputGoogleClientId?.value || '').trim(),
       ics_url: this.dom.inputIcsUrl.value.trim(),
       volume: parseInt(this.dom.sliderVolume.value, 10),
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
