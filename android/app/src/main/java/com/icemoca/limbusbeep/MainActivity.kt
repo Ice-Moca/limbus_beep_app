@@ -44,24 +44,30 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun fetchIcsDirect(urlStr: String): String {
-            return try {
-                val url = java.net.URL(urlStr)
-                val conn = url.openConnection() as java.net.HttpURLConnection
-                conn.requestMethod = "GET"
-                conn.connectTimeout = 12000
-                conn.readTimeout = 12000
-                conn.instanceFollowRedirects = true
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                val responseCode = conn.responseCode
-                if (responseCode in 200..299) {
-                    conn.inputStream.bufferedReader().use { it.readText() }
-                } else {
-                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-                    "ERROR: HTTP $responseCode - $err"
+            var result = "ERROR: Timeout or failed"
+            val thread = Thread {
+                try {
+                    val url = java.net.URL(urlStr.trim())
+                    val conn = url.openConnection() as java.net.HttpURLConnection
+                    conn.requestMethod = "GET"
+                    conn.connectTimeout = 10000
+                    conn.readTimeout = 10000
+                    conn.instanceFollowRedirects = true
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    val responseCode = conn.responseCode
+                    result = if (responseCode in 200..299) {
+                        conn.inputStream.bufferedReader().use { it.readText() }
+                    } else {
+                        val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                        "ERROR: HTTP $responseCode - $err"
+                    }
+                } catch (e: Exception) {
+                    result = "ERROR: ${e.message}"
                 }
-            } catch (e: Exception) {
-                "ERROR: ${e.message}"
             }
+            thread.start()
+            thread.join(12000)
+            return result
         }
     }
 

@@ -855,10 +855,10 @@ class PagerApp {
         } else if (result && result.startsWith("ERROR: HTTP 404")) {
           throw new Error("404 오류: 캘린더 주소가 존재하지 않습니다. Google 캘린더 설정에서 '비공개 주소(iCal)'를 다시 확인해주세요.");
         } else if (result && result.startsWith("ERROR: HTTP 403")) {
-          throw new Error("403 오류: 접근 권한이 없습니다. '비공개 주소(iCal)' 주소를 정확히 복사했는지 확인해주세요.");
+          throw new Error("403 오류: 접근 권한이 없습니다. '비공개 주소(iCal)'가 올바른지 확인해주세요.");
         }
       } catch (err) {
-        if (err.message.includes("404") || err.message.includes("403")) throw err;
+        if (err.message && (err.message.includes("404") || err.message.includes("403"))) throw err;
         console.warn("AndroidBridge fetch failed, trying web fallbacks...", err);
       }
     }
@@ -872,30 +872,47 @@ class PagerApp {
       }
     } catch (e) {}
 
-    // 3. 다중 고신뢰도 CORS 프록시 풀 순차 시도 (웹 브라우저 환경)
-    const proxyGenerators = [
-      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-      (u) => `https://thingproxy.freeboard.io/fetch/${u}`
-    ];
-
-    for (const makeProxy of proxyGenerators) {
-      try {
-        const pUrl = makeProxy(cleanUrl);
-        const resp = await fetch(pUrl, { cache: 'no-cache' });
-        if (resp.ok) {
-          const text = await resp.text();
-          if (text && text.includes("BEGIN:VCALENDAR")) {
-            return text;
-          }
+    // 3. 다중 고신뢰도 CORS 프록시 풀 순차 시도 (JSONP/JSON 파싱 지원)
+    // 3-1. allorigins JSON API (가장 안정적)
+    try {
+      const jsonpUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(cleanUrl)}`;
+      const resp = await fetch(jsonpUrl, { cache: 'no-cache' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && data.contents && data.contents.includes("BEGIN:VCALENDAR")) {
+          return data.contents;
         }
-      } catch (err) {
-        // 다음 프록시 시도
       }
-    }
+    } catch (e) {}
 
-    throw new Error("캘린더 주소(iCal)를 불러오지 못했습니다. Google 캘린더 설정의 [캘린더 통합] ➔ [iCal 형식의 비공개 주소]가 올바른지 확인해주세요.");
+    // 3-2. codetabs proxy
+    try {
+      const resp = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(cleanUrl)}`, { cache: 'no-cache' });
+      if (resp.ok) {
+        const text = await resp.text();
+        if (text && text.includes("BEGIN:VCALENDAR")) return text;
+      }
+    } catch (e) {}
+
+    // 3-3. corsproxy.io
+    try {
+      const resp = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(cleanUrl)}`, { cache: 'no-cache' });
+      if (resp.ok) {
+        const text = await resp.text();
+        if (text && text.includes("BEGIN:VCALENDAR")) return text;
+      }
+    } catch (e) {}
+
+    // 3-4. allorigins raw
+    try {
+      const resp = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(cleanUrl)}`, { cache: 'no-cache' });
+      if (resp.ok) {
+        const text = await resp.text();
+        if (text && text.includes("BEGIN:VCALENDAR")) return text;
+      }
+    } catch (e) {}
+
+    throw new Error("캘린더 주소(iCal)를 불러오지 못했습니다.\n\n확인 사항:\n1. Google 캘린더 설정 ➔ [캘린더 통합] ➔ [iCal 형식의 비공개 주소]를 복사했는지 확인\n2. 주소가 https://calendar.google.com/calendar/ical/.../basic.ics 형태인지 확인\n3. 브라우저/기기의 인터넷 연결 확인");
   }
 
   async syncCalendar(url, isSilent = false) {
