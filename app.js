@@ -117,9 +117,6 @@ class PagerApp {
       // 설정 필드
       selectOrientation: document.getElementById('select-orientation'),
       inputIcsUrl: document.getElementById('input-ics-url'),
-      inputIcsFile: document.getElementById('input-ics-file'),
-      btnUploadIcsFile: document.getElementById('btn-upload-ics-file'),
-      btnPasteIcsText: document.getElementById('btn-paste-ics-text'),
       selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
       selectSoundType: document.getElementById('select-sound-type'),
@@ -282,46 +279,7 @@ class PagerApp {
       this.syncCalendar(url);
     });
 
-    // 13. ICS 파일 직접 업로드
-    if (this.dom.btnUploadIcsFile && this.dom.inputIcsFile) {
-      this.dom.btnUploadIcsFile.addEventListener('click', () => {
-        this.dom.inputIcsFile.click();
-      });
-      this.dom.inputIcsFile.addEventListener('change', (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            const content = evt.target.result;
-            this.importIcsText(content, `파일 (${file.name})`);
-          };
-          reader.readAsText(file);
-        }
-        e.target.value = '';
-      });
-    }
-
-    // 14. ICS 텍스트 직접 붙여넣기
-    if (this.dom.btnPasteIcsText) {
-      this.dom.btnPasteIcsText.addEventListener('click', async () => {
-        let text = '';
-        try {
-          if (navigator.clipboard && navigator.clipboard.readText) {
-            text = await navigator.clipboard.readText();
-          }
-        } catch (clipErr) {}
-
-        if (!text || !text.includes('BEGIN:VCALENDAR')) {
-          text = prompt("구글 캘린더나 .ics 파일의 내용을 직접 붙여넣어주세요 (BEGIN:VCALENDAR ...):", text || "");
-        }
-
-        if (text && text.trim()) {
-          this.importIcsText(text, "텍스트 직접 등록");
-        }
-      });
-    }
-
-    // 15. 메시지 에디터 툴바
+    // 13. 메시지 에디터 툴바
     this.dom.btnLoadSample.addEventListener('click', () => {
       this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
       this.renderCustomStageCards();
@@ -334,7 +292,7 @@ class PagerApp {
       this.showToast("메시지 입력란을 초기화했습니다.");
     });
 
-    // 16. 작성된 STAGE 삐삐 적용
+    // 14. 작성된 STAGE 삐삐 적용
     this.dom.btnApplyCustom.addEventListener('click', () => this.applyCustomStages());
   }
 
@@ -428,28 +386,13 @@ class PagerApp {
     const isScanOn = this.dom.toggleScanlines ? this.dom.toggleScanlines.checked : this.config.scanlines;
     const isVigOn = this.dom.toggleVignette ? this.dom.toggleVignette.checked : (this.config.vignette !== false);
 
-    if (miniScan) miniScan.classList.toggle('hidden', !isScanOn);
-    if (miniVig) miniVig.classList.toggle('hidden', !isVigOn);
-  }
-
-  importIcsText(icsText, sourceLabel = "ICS") {
-    if (!icsText || !icsText.includes("BEGIN:VCALENDAR")) {
-      alert("올바른 iCal/ICS 형식이 아닙니다. (BEGIN:VCALENDAR 로 시작하는 텍스트나 파일이어야 합니다.)");
-      return;
+    if (miniScan) {
+      miniScan.style.display = isScanOn ? 'block' : 'none';
+      miniScan.classList.toggle('hidden', !isScanOn);
     }
-
-    try {
-      const events = this.parseIcsText(icsText);
-      const stages = this.distributeEventsTo3Stages(events.map(e => this.formatEvent(e)));
-      this.saveStoredMessages(stages);
-
-      if (events.length > 0) {
-        this.showToast(`${sourceLabel}에서 오늘 일정 ${events.length}개를 가져왔습니다.`);
-      } else {
-        this.showToast(`동기화 완료: 오늘(KST) 등록된 일정이 없습니다 (0건).`);
-      }
-    } catch (err) {
-      alert(`ICS 파싱 실패: ${err.message}`);
+    if (miniVig) {
+      miniVig.style.display = isVigOn ? 'block' : 'none';
+      miniVig.classList.toggle('hidden', !isVigOn);
     }
   }
 
@@ -924,12 +867,11 @@ class PagerApp {
   // ── Google Calendar ICS 파싱 & 동기화 ──
   async fetchIcsContent(rawUrl) {
     let cleanUrl = rawUrl.trim();
-    // webcal:// 프로토콜 변환
     if (cleanUrl.startsWith("webcal://")) {
       cleanUrl = "https://" + cleanUrl.substring(9);
     }
 
-    // 1. Android Native Bridge: 안드로이드 네이티브 HTTP 연결로 직접 다운로드 (CORS 0% 제한 없음)
+    // 1. Android Native Bridge: 안드로이드 네이티브 HTTP 연결로 직접 다운로드
     if (window.AndroidBridge && typeof window.AndroidBridge.fetchIcsDirect === 'function') {
       try {
         const result = window.AndroidBridge.fetchIcsDirect(cleanUrl);
@@ -955,47 +897,28 @@ class PagerApp {
       }
     } catch (e) {}
 
-    // 3. 다중 고신뢰도 CORS 프록시 풀 순차 시도 (JSONP/JSON 파싱 지원)
-    // 3-1. allorigins JSON API (가장 안정적)
-    try {
-      const jsonpUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(cleanUrl)}`;
-      const resp = await fetch(jsonpUrl, { cache: 'no-cache' });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data && data.contents && data.contents.includes("BEGIN:VCALENDAR")) {
-          return data.contents;
+    // 3. 다중 고신뢰도 CORS 프록시 풀 순차 시도
+    const proxyGenerators = [
+      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+      (u) => `https://thingproxy.freeboard.io/fetch/${u}`
+    ];
+
+    for (const makeProxy of proxyGenerators) {
+      try {
+        const pUrl = makeProxy(cleanUrl);
+        const resp = await fetch(pUrl, { cache: 'no-cache' });
+        if (resp.ok) {
+          const text = await resp.text();
+          if (text && text.includes("BEGIN:VCALENDAR")) {
+            return text;
+          }
         }
-      }
-    } catch (e) {}
+      } catch (err) {}
+    }
 
-    // 3-2. codetabs proxy
-    try {
-      const resp = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(cleanUrl)}`, { cache: 'no-cache' });
-      if (resp.ok) {
-        const text = await resp.text();
-        if (text && text.includes("BEGIN:VCALENDAR")) return text;
-      }
-    } catch (e) {}
-
-    // 3-3. corsproxy.io
-    try {
-      const resp = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(cleanUrl)}`, { cache: 'no-cache' });
-      if (resp.ok) {
-        const text = await resp.text();
-        if (text && text.includes("BEGIN:VCALENDAR")) return text;
-      }
-    } catch (e) {}
-
-    // 3-4. allorigins raw
-    try {
-      const resp = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(cleanUrl)}`, { cache: 'no-cache' });
-      if (resp.ok) {
-        const text = await resp.text();
-        if (text && text.includes("BEGIN:VCALENDAR")) return text;
-      }
-    } catch (e) {}
-
-    throw new Error("캘린더 주소(iCal)를 불러오지 못했습니다.\n\n확인 사항:\n1. Google 캘린더 설정 ➔ [캘린더 통합] ➔ [iCal 형식의 비공개 주소]를 복사했는지 확인\n2. 주소가 https://calendar.google.com/calendar/ical/.../basic.ics 형태인지 확인\n3. 브라우저/기기의 인터넷 연결 확인");
+    throw new Error("캘린더 주소(iCal)를 불러오지 못했습니다. Google 캘린더 설정의 [캘린더 통합] ➔ [iCal 형식의 비공개 주소]가 올바른지 확인해주세요.");
   }
 
   async syncCalendar(url, isSilent = false) {
@@ -1054,250 +977,128 @@ class PagerApp {
     }
   }
 
-  // ── 한국 표준시(KST, UTC+9) 기준 오늘(00:00:00 ~ 23:59:59.999) 범위 계산 ──
-  getKstTodayRange() {
-    const now = new Date();
-    // 브라우저 타임존 환경과 무관하게 Asia/Seoul 기준 날짜/시간 컴포넌트 추출
-    const kstFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Seoul',
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      weekday: 'short'
-    });
-    const parts = kstFormatter.formatToParts(now);
-    const getPart = (type) => parts.find(p => p.type === type)?.value;
-    
-    const y = parseInt(getPart('year'), 10);
-    const m = parseInt(getPart('month'), 10) - 1; // 0-indexed
-    const d = parseInt(getPart('day'), 10);
-
-    // KST 00:00:00 ~ 23:59:59의 UTC 에포크 ms (KST = UTC+9)
-    const kstStartEpoch = Date.UTC(y, m, d, 0, 0, 0, 0) - (9 * 3600 * 1000);
-    const kstEndEpoch = Date.UTC(y, m, d, 23, 59, 59, 999) - (9 * 3600 * 1000);
-
-    const weekdayMap = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
-    const dayOfWeek = weekdayMap[getPart('weekday')] ?? new Date(kstStartEpoch + 9 * 3600 * 1000).getUTCDay();
-
-    return {
-      year: y,
-      month: m,
-      day: d,
-      startEpoch: kstStartEpoch,
-      endEpoch: kstEndEpoch,
-      dayOfWeek: dayOfWeek, // 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
-      dateStr: `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    };
-  }
-
-  // ── iCal 날짜 문자열을 KST 기준 시간 객체로 정밀 파싱 ──
-  parseIcsDate(val) {
-    if (!val) return null;
-    val = val.trim();
-    const isUtc = val.endsWith('Z');
-    const clean = val.replace('Z', '');
-
-    if (clean.length === 8) {
-      // 종일 일정 (YYYYMMDD)
-      const y = parseInt(clean.substring(0, 4), 10);
-      const m = parseInt(clean.substring(4, 6), 10) - 1;
-      const d = parseInt(clean.substring(6, 8), 10);
-      const startEpoch = Date.UTC(y, m, d, 0, 0, 0, 0) - (9 * 3600 * 1000);
-      const endEpoch = Date.UTC(y, m, d, 23, 59, 59, 999) - (9 * 3600 * 1000);
-      return {
-        year: y,
-        month: m,
-        day: d,
-        epoch: startEpoch,
-        endEpoch: endEpoch,
-        isAllDay: true,
-        hours: 0,
-        minutes: 0
-      };
-    }
-
-    if (clean.includes('T')) {
-      const [dPart, tPart] = clean.split('T');
-      const y = parseInt(dPart.substring(0, 4), 10);
-      const m = parseInt(dPart.substring(4, 6), 10) - 1;
-      const d = parseInt(dPart.substring(6, 8), 10);
-      const hh = parseInt(tPart.substring(0, 2), 10) || 0;
-      const mm = parseInt(tPart.substring(2, 4), 10) || 0;
-      const ss = parseInt(tPart.substring(4, 6), 10) || 0;
-
-      let epoch = 0;
-      let kstH = hh;
-      let kstM = mm;
-
-      if (isUtc) {
-        // UTC 시간인 경우 KST(+9시간)로 정확히 변환
-        epoch = Date.UTC(y, m, d, hh, mm, ss);
-        const kstDate = new Date(epoch + 9 * 3600 * 1000);
-        kstH = kstDate.getUTCHours();
-        kstM = kstDate.getUTCMinutes();
-      } else {
-        // 로컬/TZID 시간인 경우 기본적으로 한국 시간(KST)으로 해석
-        epoch = Date.UTC(y, m, d, hh, mm, ss) - (9 * 3600 * 1000);
-      }
-
-      return {
-        year: y,
-        month: m,
-        day: d,
-        epoch: epoch,
-        isAllDay: false,
-        hours: kstH,
-        minutes: kstM
-      };
-    }
-    return null;
-  }
-
+  // ── 한국 표준시(KST) 오늘 일정 파싱 ──
   parseIcsText(icsText) {
-    // 1. RFC 5545 라인 언폴딩 (줄바꿈 후 공백/탭 연속 처리)
+    const now = new Date();
+    // KST 시간 계산 (UTC + 9)
+    const kst = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (9 * 3600 * 1000));
+    const todayY = kst.getFullYear();
+    const todayM = kst.getMonth() + 1;
+    const todayD = kst.getDate();
+    const todayDayOfWeek = kst.getDay(); // 0=일, 1=월, 2=화, ...
+    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+    const todayDayName = dayNames[todayDayOfWeek];
+
+    const events = [];
     const cleanIcs = icsText.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').replace(/\r[ \t]/g, '');
     const lines = cleanIcs.split(/\r\n|\n|\r/);
-
-    const kstToday = this.getKstTodayRange();
-    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-
-    const rawEvents = [];
+    
     let inEvent = false;
-    let cur = {};
+    let curEvent = {};
 
     for (let line of lines) {
       line = line.trim();
       if (line === "BEGIN:VEVENT") {
         inEvent = true;
-        cur = {};
+        curEvent = {};
       } else if (line === "END:VEVENT") {
         inEvent = false;
-        if (cur.SUMMARY || cur.DTSTART) {
-          rawEvents.push(cur);
+        if (this.isEventToday(curEvent, todayY, todayM, todayD, todayDayName)) {
+          events.push(curEvent);
         }
       } else if (inEvent && line.includes(":")) {
         const idx = line.indexOf(":");
         const rawKey = line.substring(0, idx);
         const val = line.substring(idx + 1);
         const key = rawKey.split(";")[0].toUpperCase();
-        cur[key] = val;
+        curEvent[key] = val;
       }
     }
 
-    const todayEvents = [];
+    events.sort((a, b) => (a.DTSTART || '').localeCompare(b.DTSTART || ''));
+    return events;
+  }
 
-    rawEvents.forEach(ev => {
-      const dtstartStr = ev.DTSTART || "";
-      if (!dtstartStr) return;
-      const startParsed = this.parseIcsDate(dtstartStr);
-      if (!startParsed) return;
+  isEventToday(ev, y, m, d, todayDayName) {
+    const dtstart = ev.DTSTART || "";
+    if (!dtstart) return false;
 
-      const dtendStr = ev.DTEND || "";
-      let endParsed = dtendStr ? this.parseIcsDate(dtendStr) : null;
-      if (!endParsed) {
-        const durMs = startParsed.isAllDay ? 24 * 3600 * 1000 : 3600 * 1000;
-        endParsed = {
-          epoch: startParsed.epoch + durMs,
-          isAllDay: startParsed.isAllDay,
-          hours: (startParsed.hours + (startParsed.isAllDay ? 0 : 1)) % 24,
-          minutes: startParsed.minutes
-        };
-      }
-
-      // 종일 일정의 종료일 보정: iCal DTEND(종일)는 exclusive(종료 익일 00:00)이므로 endEpoch 사용
-      const eventStartEpoch = startParsed.epoch;
-      const eventEndEpoch = startParsed.isAllDay ? (startParsed.endEpoch || (endParsed.epoch - 1000)) : endParsed.epoch;
-
-      const summary = (ev.SUMMARY || "(제목 없음)").replace(/\\([,;Nn\\])/g, (m, c) => (c === 'n' || c === 'N') ? ' ' : c);
-
-      // ── 1. 반복 일정(RRULE)인 경우 오늘(KST) 발생 여부 체크 ──
-      if (ev.RRULE) {
-        const rrule = ev.RRULE;
-        const freqMatch = rrule.match(/FREQ=([^;]+)/);
-        const freq = freqMatch ? freqMatch[1].toUpperCase() : '';
+    // 1. 반복 일정 (RRULE)
+    if (ev.RRULE) {
+      const rrule = ev.RRULE.toUpperCase();
+      if (rrule.includes("FREQ=DAILY")) return true;
+      if (rrule.includes("FREQ=WEEKLY")) {
         const byDayMatch = rrule.match(/BYDAY=([^;]+)/);
-        const byDays = byDayMatch ? byDayMatch[1].toUpperCase().split(',') : [];
-        const untilMatch = rrule.match(/UNTIL=([^;]+)/);
-        const untilParsed = untilMatch ? this.parseIcsDate(untilMatch[1]) : null;
-
-        // 시작일이 오늘 이후이면 아직 시작하지 않은 반복 일정
-        if (startParsed.epoch > kstToday.endEpoch) return;
-        // 종료일(UNTIL)이 오늘 이전이면 이미 종료된 반복 일정
-        if (untilParsed && untilParsed.epoch < kstToday.startEpoch) return;
-
-        let occursToday = false;
-        const todayDayName = dayNames[kstToday.dayOfWeek];
-
-        if (freq === 'DAILY') {
-          occursToday = true;
-        } else if (freq === 'WEEKLY') {
-          if (byDays.length > 0) {
-            occursToday = byDays.some(bd => bd.endsWith(todayDayName));
-          } else {
-            const startKstDate = new Date(startParsed.epoch + 9 * 3600 * 1000);
-            occursToday = (startKstDate.getUTCDay() === kstToday.dayOfWeek);
-          }
-        } else if (freq === 'MONTHLY') {
-          occursToday = (startParsed.day === kstToday.day);
-        } else if (freq === 'YEARLY') {
-          occursToday = (startParsed.month === kstToday.month && startParsed.day === kstToday.day);
-        }
-
-        if (occursToday) {
-          todayEvents.push({
-            summary,
-            isAllDay: startParsed.isAllDay,
-            startHours: startParsed.hours,
-            startMinutes: startParsed.minutes,
-            endHours: endParsed.hours,
-            endMinutes: endParsed.minutes,
-            sortEpoch: Date.UTC(kstToday.year, kstToday.month, kstToday.day, startParsed.hours, startParsed.minutes, 0)
-          });
-        }
-      } else {
-        // ── 2. 단일 / 다기간 일정: 오늘(한국시간 00시 ~ 24시)과 겹치는지 체크 ──
-        const overlapsToday = (eventStartEpoch <= kstToday.endEpoch && eventEndEpoch >= kstToday.startEpoch);
-        if (overlapsToday) {
-          todayEvents.push({
-            summary,
-            isAllDay: startParsed.isAllDay,
-            startHours: startParsed.hours,
-            startMinutes: startParsed.minutes,
-            endHours: endParsed.hours,
-            endMinutes: endParsed.minutes,
-            sortEpoch: eventStartEpoch
-          });
+        if (byDayMatch) {
+          if (byDayMatch[1].includes(todayDayName)) return true;
+        } else {
+          const ey = parseInt(dtstart.substr(0, 4), 10);
+          const em = parseInt(dtstart.substr(4, 2), 10);
+          const ed = parseInt(dtstart.substr(6, 2), 10);
+          const origDate = new Date(Date.UTC(ey, em - 1, ed));
+          if (origDate.getUTCDay() === new Date(Date.UTC(y, m - 1, d)).getUTCDay()) return true;
         }
       }
-    });
-
-    // 오늘 일정 시간순 정렬
-    todayEvents.sort((a, b) => a.sortEpoch - b.sortEpoch);
-
-    // 중복 제거
-    const unique = [];
-    const seen = new Set();
-    todayEvents.forEach(e => {
-      const key = `${e.summary}_${e.startHours}:${e.startMinutes}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        unique.push(e);
+      if (rrule.includes("FREQ=MONTHLY")) {
+        const ed = parseInt(dtstart.substr(6, 2), 10);
+        if (ed === d) return true;
       }
-    });
+    }
 
-    return unique;
+    // 2. 종일 일정 (YYYYMMDD)
+    if (dtstart.length === 8) {
+      const ey = parseInt(dtstart.substr(0, 4), 10);
+      const em = parseInt(dtstart.substr(4, 2), 10);
+      const ed = parseInt(dtstart.substr(6, 2), 10);
+      return ey === y && em === m && ed === d;
+    }
+
+    // 3. 시간 지정 일정 (YYYYMMDDTHHMMSS)
+    if (dtstart.includes("T")) {
+      const raw = dtstart.replace("Z", "");
+      let ey = parseInt(raw.substr(0, 4), 10);
+      let em = parseInt(raw.substr(4, 2), 10);
+      let ed = parseInt(raw.substr(6, 2), 10);
+      let eh = parseInt(raw.substr(9, 2), 10);
+
+      if (dtstart.endsWith("Z")) {
+        // UTC -> KST (+9h)
+        const utcDate = new Date(Date.UTC(ey, em - 1, ed, eh));
+        const kstDate = new Date(utcDate.getTime() + 9 * 3600 * 1000);
+        return kstDate.getUTCFullYear() === y && (kstDate.getUTCMonth() + 1) === m && kstDate.getUTCDate() === d;
+      }
+      return ey === y && em === m && ed === d;
+    }
+
+    return false;
   }
 
   formatEvent(ev) {
-    let timeInfo = "종일";
-    if (!ev.isAllDay) {
-      const sh = String(ev.startHours).padStart(2, '0');
-      const sm = String(ev.startMinutes).padStart(2, '0');
-      const eh = String(ev.endHours).padStart(2, '0');
-      const em = String(ev.endMinutes).padStart(2, '0');
-      timeInfo = `${sh}:${sm} - ${eh}:${em}`;
+    const summary = (ev.SUMMARY || "(제목 없음)").replace(/\\([,;Nn\\])/g, (m, c) => (c === 'n' || c === 'N') ? ' ' : c);
+    const dtstart = ev.DTSTART || "";
+    const dtend = ev.DTEND || "";
+    let timeInfo = "오늘 종일";
+
+    if (dtstart.includes("T")) {
+      const rawS = dtstart.replace("Z", "");
+      let sh = parseInt(rawS.substr(9, 2), 10);
+      let sm = rawS.substr(11, 2);
+      if (dtstart.endsWith("Z")) sh = (sh + 9) % 24;
+      const startStr = `${String(sh).padStart(2, '0')}:${sm}`;
+
+      if (dtend && dtend.includes("T")) {
+        const rawE = dtend.replace("Z", "");
+        let eh = parseInt(rawE.substr(9, 2), 10);
+        let em = rawE.substr(11, 2);
+        if (dtend.endsWith("Z")) eh = (eh + 9) % 24;
+        const endStr = `${String(eh).padStart(2, '0')}:${em}`;
+        timeInfo = `${startStr} - ${endStr}`;
+      } else {
+        timeInfo = startStr;
+      }
     }
-    return { text: ev.summary, time_info: timeInfo };
+
+    return { text: summary, time_info: timeInfo };
   }
 
   distributeEventsTo3Stages(formattedEvents) {
@@ -1310,7 +1111,6 @@ class PagerApp {
     const total = formattedEvents.length;
 
     if (total <= 3) {
-      // 1~3개인 경우 각 STAGE에 1개씩 깔끔하게 분배
       for (let s = 0; s < total; s++) {
         stages.push({
           stage: s + 1,
@@ -1318,7 +1118,6 @@ class PagerApp {
         });
       }
     } else {
-      // 4개 이상인 경우 균등 분배
       const base = Math.floor(total / n);
       const extra = total % n;
       let idx = 0;

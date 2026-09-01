@@ -331,30 +331,34 @@ html, body {
 .mini-crt-scanlines {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.45) 50%);
-  background-size: 100% 3px;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.55) 0px,
+    rgba(0, 0, 0, 0.55) 1.5px,
+    transparent 1.5px,
+    transparent 3px
+  );
   pointer-events: none;
-  z-index: 2;
-  opacity: 1;
-  transition: opacity 0.2s ease;
+  z-index: 10;
+  display: block;
 }
 
 .mini-crt-scanlines.hidden {
-  opacity: 0 !important;
+  display: none !important;
 }
 
 .mini-crt-vignette {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: radial-gradient(circle at center, transparent 35%, rgba(0, 0, 0, 0.85) 100%);
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.75) 100%);
+  box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.95);
   pointer-events: none;
-  z-index: 3;
-  opacity: 1;
-  transition: opacity 0.2s ease;
+  z-index: 11;
+  display: block;
 }
 
 .mini-crt-vignette.hidden {
-  opacity: 0 !important;
+  display: none !important;
 }
 
 .mini-screen-decor {
