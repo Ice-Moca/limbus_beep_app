@@ -582,7 +582,7 @@ class PagerApp {
       if (this.currentStageIdx >= this.messages.length) {
         this.startComplete();
       } else {
-        this.updateDisplayIdle();
+        this.startBeeping();
       }
     } else if (this.state === STATE.COMPLETE) {
       this.currentStageIdx = 0;
@@ -904,6 +904,12 @@ class PagerApp {
   }
 
   saveSettingsFromModal() {
+    this.syncCustomBufferFromDOM();
+    const validStages = this.customStages.filter(s => s.messages && s.messages.length > 0);
+    if (validStages.length > 0) {
+      this.saveStoredMessages(validStages);
+    }
+
     const newConfig = {
       orientation: this.dom.selectOrientation.value || 'landscape',
       google_client_id: (this.dom.inputGoogleClientId?.value || '').trim(),
