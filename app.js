@@ -368,15 +368,7 @@ class PagerApp {
       return;
     }
 
-    const clientId = (this.dom.inputGoogleClientId?.value || this.config.google_client_id || '').trim();
-    if (!clientId || clientId.length < 10) {
-      alert("Google Cloud Console에서 발급받은 OAuth Client ID를 입력해주세요.\n\n(또는 하단의 iCal 비공개 URL을 이용하시면 Client ID 없이 1초 만에 즉시 동기화됩니다.)");
-      this.dom.inputGoogleClientId?.focus();
-      return;
-    }
-
-    this.config.google_client_id = clientId;
-    this.saveConfig(this.config);
+    const clientId = this.config.google_client_id || "889981242318-q7v5hph7l7q5r34p8c23h4kfffl9e7da.apps.googleusercontent.com";
 
     try {
       const redirectUri = window.location.origin && !window.location.origin.startsWith('file:') 
@@ -392,7 +384,7 @@ class PagerApp {
       const top = window.screen.height / 2 - height / 2;
       const popup = window.open(authUrl, 'google_login_popup', `width=${width},height=${height},top=${top},left=${left}`);
 
-      this.showToast("구글 로그인 팝업 창에서 계정을 선택하세요.");
+      this.showToast("구글 계정 로그인 창이 열립니다.");
 
       const pollTimer = setInterval(async () => {
         try {
