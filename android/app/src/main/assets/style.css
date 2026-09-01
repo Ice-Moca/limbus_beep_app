@@ -8,17 +8,17 @@
 :root {
   --bg-color: #000000;
   
-  /* 테마 컬러 */
-  --cyan-primary: #00e5ff;
-  --cyan-accent: #33eeff;
-  --cyan-dim: #00507a;
-  --cyan-dark: #001f30;
-  --cyan-glow: rgba(0, 229, 255, 0.35);
+  /* 테마 컬러: 인게임 단테 삐삐 오리지널 블루 & 블랙 */
+  --cyan-primary: #2fbffc;
+  --cyan-accent: #5cd0ff;
+  --cyan-dim: #165b80;
+  --cyan-dark: #072233;
+  --cyan-glow: rgba(47, 191, 252, 0.6);
 
-  --amber-accent: #ff9800;
+  --amber-accent: #ff9d00;
   --amber-dim: #b26a00;
-  --text-dim: #0088bb;
-  --text-muted: #627d92;
+  --text-dim: #1c7ba6;
+  --text-muted: #567287;
   --text-danger: #ff5252;
   --text-success: #00e676;
   
@@ -57,7 +57,7 @@ html, body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background-color: var(--bg-color);
+  background-color: #000000;
   color: var(--cyan-primary);
   font-family: var(--font-main);
   letter-spacing: 0.5px;
@@ -103,7 +103,7 @@ html, body {
   padding: clamp(12px, 3vh, 32px) clamp(16px, 4vw, 48px);
   cursor: pointer;
   outline: none;
-  background: radial-gradient(circle at center, #050b12 0%, #000000 100%);
+  background: #000000;
 }
 
 /* 네온 외곽 프레임 & 코너 장식 */
