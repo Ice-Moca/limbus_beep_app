@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Limbus Beep - 단테 삐삐 시뮬레이터</title>
+  <title>단테 삐삐</title>
   <link rel="stylesheet" href="style.css">
   <!-- Google Identity Services SDK -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -24,7 +24,7 @@
       <div class="corner corner-br"></div>
     </div>
 
-    <!-- 초미니멀 상단 바 (설정 버튼만 우측 상단에 깔끔하게 배치) -->
+    <!-- 초미니멀 상단 바 (설정 버튼만 우측 상단에 심플하게 배치) -->
     <header class="pager-header">
       <div class="header-left"></div>
       <div class="header-right">
@@ -66,20 +66,14 @@
   <div id="settings-modal" class="modal-overlay hidden">
     <div class="modal-card">
       
-      <!-- 모달 헤더 -->
+      <!-- 모달 헤더 (영어/서브텍스트 제거, 순수 한글 타이틀) -->
       <div class="modal-header">
         <div class="modal-title-group">
           <div class="modal-title">
-            <span class="title-tag">CONFIG</span>
-            <span>단테 삐삐 환경 설정</span>
-            <span class="version-pill">v2.0</span>
+            <span>환경 설정</span>
           </div>
-          <span class="modal-subtitle">PDA CONFIGURATION SYSTEM</span>
         </div>
-        <div class="modal-header-actions">
-          <span class="esc-badge">ESC: 닫기</span>
-          <button id="btn-close-settings" class="close-btn" title="닫기">&times;</button>
-        </div>
+        <button id="btn-close-settings" class="close-btn" title="닫기">&times;</button>
       </div>
 
       <!-- 세그먼트 탭 네비게이션 -->
@@ -88,37 +82,34 @@
           <span>캘린더 연동</span>
         </button>
         <button class="tab-btn" data-tab="tab-messages">
-          <span>메시지 & STAGE 관리</span>
+          <span>메시지 관리</span>
         </button>
         <button class="tab-btn" data-tab="tab-sound">
-          <span>화면 & 사운드 설정</span>
+          <span>화면 및 사운드</span>
         </button>
       </div>
 
-      <!-- 모달 본문 영역 -->
+      <!-- 모달 본문 영역 (작은 설명글 전면 제거) -->
       <div class="modal-body">
         
         <!-- ── 탭 1: 캘린더 연동 ── -->
         <div id="tab-calendar" class="tab-pane active">
           
-          <!-- 구글 계정 OAuth 연동 카드 -->
+          <!-- 구글 계정 로그인 카드 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">GOOGLE 캘린더 원클릭 로그인 연동</span>
+              <span class="card-tag">Google 캘린더 연동</span>
             </div>
-            <p class="section-desc">
-              구글 계정으로 로그인하여 오늘의 캘린더 일정을 3단계 메시지로 자동 동기화합니다.
-            </p>
 
             <div class="form-group">
               <label for="input-google-client-id">Google Cloud OAuth Client ID</label>
-              <input type="text" id="input-google-client-id" placeholder="Google Cloud 발급 Client ID를 입력하세요 (xxxx.apps.googleusercontent.com)" autocomplete="off" spellcheck="false">
+              <input type="text" id="input-google-client-id" placeholder="Google Cloud OAuth Client ID 입력" autocomplete="off" spellcheck="false">
             </div>
 
             <div class="oauth-action-row" style="margin-top: 4px;">
               <button id="btn-google-login" class="btn btn-google">
                 <span class="btn-g-logo">G</span>
-                <span id="google-login-text">Google 계정으로 로그인하여 동기화</span>
+                <span id="google-login-text">Google 계정으로 로그인</span>
               </button>
               <button id="btn-google-logout" class="btn btn-danger-outline hidden">연결 해제</button>
             </div>
@@ -127,103 +118,80 @@
               <span class="status-dot-active"></span>
               <span id="oauth-account-email">연동 완료</span>
             </div>
-
-            <div class="info-tip-box" style="margin-top: 6px;">
-              <div class="tip-title">Google OAuth 404 안내</div>
-              <div class="tip-desc">
-                Google의 보안 정책상, 등록되지 않은 임의의 Client ID는 404/401 에러를 반환합니다. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:var(--cyan-primary);text-decoration:underline;">Google Cloud Console</a>에서 무료로 발급받은 본인의 웹 Client ID를 위에 입력하시면 즉시 정상 로그인 팝업이 작동합니다.
-              </div>
-            </div>
           </div>
 
-          <!-- iCal 비공개 URL 연동 (선택 사항) -->
+          <!-- iCal 비공개 URL 연동 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">iCal 비공개 URL 연동 (Client ID 없이 즉시 동기화)</span>
-              <button id="btn-paste-clipboard" class="btn-link">클립보드 붙여넣기</button>
+              <span class="card-tag">iCal 비공개 주소 연동</span>
+              <button id="btn-paste-clipboard" class="btn-link">붙여넣기</button>
             </div>
-            <p class="section-desc">
-              Google Cloud 설정 없이 <strong>'iCal 비공개 주소'</strong>로 1초 만에 즉시 동기화할 수 있습니다.
-            </p>
             <div class="input-with-btn">
               <input type="text" id="input-ics-url" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" autocomplete="off" spellcheck="false">
-              <button id="btn-sync-now" class="btn btn-primary">즉시 동기화</button>
+              <button id="btn-sync-now" class="btn btn-primary">동기화</button>
             </div>
           </div>
 
           <!-- 자동 동기화 주기 -->
           <div class="option-row">
-            <div>
-              <div class="option-title">백그라운드 자동 캘린더 갱신 주기</div>
-              <div class="option-desc">주기적으로 캘린더의 최신 일정을 자동 동기화합니다.</div>
-            </div>
+            <div class="option-title">자동 동기화 주기</div>
             <select id="select-auto-sync" class="cyber-select">
-              <option value="0">자동 동기화 끄기</option>
-              <option value="5">5분마다</option>
-              <option value="10">10분마다</option>
-              <option value="30">30분마다</option>
-              <option value="60" selected>1시간마다</option>
+              <option value="0">끄기</option>
+              <option value="5">5분</option>
+              <option value="10">10분</option>
+              <option value="30">30분</option>
+              <option value="60" selected>1시간</option>
             </select>
           </div>
 
         </div>
 
-        <!-- ── 탭 2: 메시지 & 사용자 정의 STAGE 관리 ── -->
+        <!-- ── 탭 2: 메시지 관리 ── -->
         <div id="tab-messages" class="tab-pane">
           
           <div class="messages-top-bar">
             <div class="stage-control-group">
-              <span class="stage-total-label">총 단계 수:</span>
               <span id="label-custom-stage-count" class="stage-count-badge">3 STAGES</span>
-              <button id="btn-add-stage" class="btn btn-sm btn-primary">+ STAGE 추가</button>
+              <button id="btn-add-stage" class="btn btn-sm btn-primary">+ 단계 추가</button>
             </div>
             <div class="sample-actions">
-              <button id="btn-load-sample" class="btn btn-sm btn-secondary">기본 예시 불러오기</button>
-              <button id="btn-clear-messages" class="btn btn-sm btn-danger-outline">전체 비우기</button>
+              <button id="btn-load-sample" class="btn btn-sm btn-secondary">예시 불러오기</button>
+              <button id="btn-clear-messages" class="btn btn-sm btn-danger-outline">비우기</button>
             </div>
           </div>
 
-          <p class="section-desc" style="margin-bottom: 8px;">
-            각 STAGE별로 출력될 메시지들을 한 줄에 하나씩 직접 입력하고 수정할 수 있습니다.
-          </p>
-
-          <!-- 동적으로 생성되는 각 STAGE 카드 컨테이너 -->
+          <!-- 각 STAGE 카드 컨테이너 -->
           <div id="stage-cards-container" class="stage-cards-scroll">
             <!-- JS에서 렌더링 -->
           </div>
 
           <button id="btn-apply-custom-messages" class="btn btn-primary btn-block" style="margin-top: 10px;">
-            작성한 STAGE 및 메시지로 삐삐 즉시 적용
+            적용하기
           </button>
         </div>
 
-        <!-- ── 탭 3: 화면 & 사운드 설정 ── -->
+        <!-- ── 탭 3: 화면 및 사운드 설정 ── -->
         <div id="tab-sound" class="tab-pane">
           
-          <!-- 화면 방향 및 디스플레이 설정 -->
+          <!-- 화면 설정 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">DISPLAY & ORIENTATION</span>
+              <span class="card-tag">화면 설정</span>
             </div>
 
-            <!-- 화면 방향 선택 (가로 모드 기본) -->
+            <!-- 화면 방향 -->
             <div class="option-row">
-              <div>
-                <div class="option-title">화면 방향 (Screen Orientation)</div>
-                <div class="option-desc">가로 모드(기본) 또는 세로 모드로 화면을 고정합니다.</div>
-              </div>
+              <div class="option-title">화면 방향</div>
               <select id="select-orientation" class="cyber-select">
-                <option value="landscape" selected>가로 모드 (Landscape) - 기본</option>
-                <option value="portrait">세로 모드 (Portrait)</option>
-                <option value="sensor">자동 회전 (Auto / Sensor)</option>
+                <option value="landscape" selected>가로 모드 (기본)</option>
+                <option value="portrait">세로 모드</option>
+                <option value="sensor">자동 회전</option>
               </select>
             </div>
 
+            <!-- 복호화 속도 -->
             <div class="option-row">
-              <div>
-                <div class="option-title">복호화(Decryption) 애니메이션 속도</div>
-                <div class="option-desc">글리치 텍스트가 해독되는 시간입니다.</div>
-              </div>
+              <div class="option-title">복호화 속도</div>
               <select id="select-decode-speed" class="cyber-select">
                 <option value="fast">빠르게 (0.5초)</option>
                 <option value="normal" selected>보통 (0.9초)</option>
@@ -231,66 +199,57 @@
               </select>
             </div>
 
+            <!-- CRT 스캔라인 -->
             <div class="option-row">
-              <div>
-                <div class="option-title">CRT 스캔라인 가로 줄무늬 (Scanlines)</div>
-                <div class="option-desc">레트로 브라운관 모니터 효과를 켜거나 끕니다.</div>
-              </div>
+              <div class="option-title">CRT 스캔라인</div>
               <label class="switch">
                 <input type="checkbox" id="toggle-scanlines" checked>
                 <span class="slider-switch"></span>
               </label>
             </div>
 
+            <!-- CRT 비네팅 -->
             <div class="option-row">
-              <div>
-                <div class="option-title">CRT 외곽 비네팅 음영 (Vignette)</div>
-                <div class="option-desc">모니터 가장자리 어두운 음영 효과를 적용합니다.</div>
-              </div>
+              <div class="option-title">CRT 비네팅</div>
               <label class="switch">
                 <input type="checkbox" id="toggle-vignette" checked>
                 <span class="slider-switch"></span>
               </label>
             </div>
 
+            <!-- 테마 컬러 -->
             <div class="option-row">
-              <div>
-                <div class="option-title">인터페이스 네온 테마 컬러</div>
-                <div class="option-desc">단테 삐삐의 발광 색상 프리셋을 선택합니다.</div>
-              </div>
+              <div class="option-title">테마 컬러</div>
               <select id="select-theme-color" class="cyber-select">
-                <option value="cyan" selected>단테 시안 (Cyan Phosphor)</option>
-                <option value="amber">황금가지 앰버 (Golden Amber)</option>
-                <option value="green">레트로 그린 (Matrix Green)</option>
+                <option value="cyan" selected>단테 시안</option>
+                <option value="amber">황금가지 앰버</option>
+                <option value="green">레트로 그린</option>
               </select>
             </div>
           </div>
 
-          <!-- 볼륨 설정 카드 -->
+          <!-- 사운드 설정 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">AUDIO CONTROL</span>
+              <span class="card-tag">사운드 설정</span>
             </div>
             
             <div class="form-group">
               <div class="slider-header">
-                <span class="slider-title">비프 사운드 볼륨</span>
+                <span class="slider-title">볼륨</span>
                 <span id="label-volume" class="slider-val">80%</span>
               </div>
               <div class="input-with-btn">
                 <input type="range" id="slider-volume" min="0" max="100" value="80" class="cyber-slider">
-                <button id="btn-test-sound" class="btn btn-secondary">소리 테스트</button>
+                <button id="btn-test-sound" class="btn btn-secondary">테스트</button>
               </div>
             </div>
 
             <div class="option-row" style="margin-top: 10px;">
-              <div>
-                <div class="option-title">사운드 출력 엔진</div>
-                <div class="option-desc">재생할 오디오 소스를 선택합니다.</div>
-              </div>
+              <div class="option-title">사운드 종류</div>
               <select id="select-sound-type" class="cyber-select">
-                <option value="file" selected>기본 비프 파일 (beep.wav)</option>
-                <option value="synth">1000Hz 신디사이저 톤</option>
+                <option value="file" selected>비프 사운드</option>
+                <option value="synth">신디사이저 톤</option>
               </select>
             </div>
           </div>
@@ -301,10 +260,10 @@
 
       <!-- 모달 푸터 액션 버튼 -->
       <div class="modal-footer">
-        <button id="btn-reset-default" class="btn btn-danger-outline">기본값 초기화</button>
+        <button id="btn-reset-default" class="btn btn-danger-outline">초기화</button>
         <div class="footer-right-btns">
           <button id="btn-cancel-settings" class="btn btn-secondary">취소</button>
-          <button id="btn-save-settings" class="btn btn-primary">설정 저장 및 닫기</button>
+          <button id="btn-save-settings" class="btn btn-primary">저장</button>
         </div>
       </div>
 
