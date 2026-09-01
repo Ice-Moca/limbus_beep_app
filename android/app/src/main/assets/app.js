@@ -720,7 +720,7 @@ class PagerApp {
     this.state = STATE.IDLE;
 
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "단테 삐삐 대기 중";
+    this.dom.displaySubLabel.textContent = "";
     this.dom.displayMain.textContent = "SPACE 를 눌러 시작";
     this.dom.displayMain.className = 'main-text';
     this.dom.displayTime.classList.remove('visible');
