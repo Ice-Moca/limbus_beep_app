@@ -839,45 +839,113 @@ class PagerApp {
   }
 
   // ── Google Calendar ICS 파싱 & 동기화 ──
+  async fetchIcsContent(rawUrl) {
+    let cleanUrl = rawUrl.trim();
+    // webcal:// 프로토콜 변환
+    if (cleanUrl.startsWith("webcal://")) {
+      cleanUrl = "https://" + cleanUrl.substring(9);
+    }
+
+    // 1. Android Native Bridge: 안드로이드 네이티브 HTTP 연결로 직접 다운로드 (CORS 0% 제한 없음)
+    if (window.AndroidBridge && typeof window.AndroidBridge.fetchIcsDirect === 'function') {
+      try {
+        const result = window.AndroidBridge.fetchIcsDirect(cleanUrl);
+        if (result && !result.startsWith("ERROR:") && result.includes("BEGIN:VCALENDAR")) {
+          return result;
+        } else if (result && result.startsWith("ERROR: HTTP 404")) {
+          throw new Error("404 오류: 캘린더 주소가 존재하지 않습니다. Google 캘린더 설정에서 '비공개 주소(iCal)'를 다시 확인해주세요.");
+        } else if (result && result.startsWith("ERROR: HTTP 403")) {
+          throw new Error("403 오류: 접근 권한이 없습니다. '비공개 주소(iCal)' 주소를 정확히 복사했는지 확인해주세요.");
+        }
+      } catch (err) {
+        if (err.message.includes("404") || err.message.includes("403")) throw err;
+        console.warn("AndroidBridge fetch failed, trying web fallbacks...", err);
+      }
+    }
+
+    // 2. 브라우저 Direct fetch 시도
+    try {
+      const resp = await fetch(cleanUrl, { cache: 'no-cache' });
+      if (resp.ok) {
+        const text = await resp.text();
+        if (text && text.includes("BEGIN:VCALENDAR")) return text;
+      }
+    } catch (e) {}
+
+    // 3. 다중 고신뢰도 CORS 프록시 풀 순차 시도 (웹 브라우저 환경)
+    const proxyGenerators = [
+      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+      (u) => `https://thingproxy.freeboard.io/fetch/${u}`
+    ];
+
+    for (const makeProxy of proxyGenerators) {
+      try {
+        const pUrl = makeProxy(cleanUrl);
+        const resp = await fetch(pUrl, { cache: 'no-cache' });
+        if (resp.ok) {
+          const text = await resp.text();
+          if (text && text.includes("BEGIN:VCALENDAR")) {
+            return text;
+          }
+        }
+      } catch (err) {
+        // 다음 프록시 시도
+      }
+    }
+
+    throw new Error("캘린더 주소(iCal)를 불러오지 못했습니다. Google 캘린더 설정의 [캘린더 통합] ➔ [iCal 형식의 비공개 주소]가 올바른지 확인해주세요.");
+  }
+
   async syncCalendar(url, isSilent = false) {
-    if (!url || url.length < 10) {
+    if (!url || url.trim().length < 10) {
       if (!isSilent) alert("유효한 Google Calendar 비공개 iCal 주소를 입력해주세요.");
       return;
     }
 
-    if (!isSilent) this.dom.btnSyncNow.textContent = "동기화 중...";
+    const cleanUrl = url.trim().replace(/^webcal:\/\//, 'https://');
+    if (!cleanUrl.includes("calendar.google.com") && !cleanUrl.endsWith(".ics")) {
+      if (!isSilent) {
+        const proceed = confirm("입력된 주소가 일반적인 Google 캘린더 iCal 주소(.ics)와 다릅니다. 계속 진행하시겠습니까?");
+        if (!proceed) return;
+      }
+    }
+
+    if (!isSilent && this.dom.btnSyncNow) {
+      this.dom.btnSyncNow.textContent = "동기화 중...";
+      this.dom.btnSyncNow.disabled = true;
+    }
 
     try {
-      let icsText = "";
-      try {
-        const resp = await fetch(url);
-        icsText = await resp.text();
-      } catch (corsErr) {
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-        const resp2 = await fetch(proxyUrl);
-        icsText = await resp2.text();
-      }
+      const icsText = await this.fetchIcsContent(cleanUrl);
 
       if (!icsText || !icsText.includes("BEGIN:VCALENDAR")) {
-        throw new Error("올바른 iCal/ICS 형식이 아닙니다.");
+        throw new Error("올바른 iCal/ICS 파일 형식이 아닙니다.");
       }
 
       const events = this.parseIcsText(icsText);
       const stages = this.distributeEventsTo3Stages(events.map(e => this.formatEvent(e)));
 
       this.saveStoredMessages(stages);
-      this.config.ics_url = url;
+      this.config.ics_url = cleanUrl;
       this.saveConfig(this.config);
 
       if (!isSilent) {
-        this.showToast(`오늘 일정 ${events.length}개를 가져와 [메시지 관리]에 채웠습니다.`);
-        this.dom.btnSyncNow.textContent = "동기화";
+        this.showToast(`오늘 일정 ${events.length}개를 성공적으로 가져왔습니다.`);
+        if (this.dom.btnSyncNow) {
+          this.dom.btnSyncNow.textContent = "동기화";
+          this.dom.btnSyncNow.disabled = false;
+        }
       }
     } catch (e) {
-      console.error("동기화 실패:", e);
+      console.error("캘린더 동기화 실패:", e);
       if (!isSilent) {
-        alert(`캘린더 동기화 실패: ${e.message}`);
-        this.dom.btnSyncNow.textContent = "동기화";
+        alert(`캘린더 동기화 실패:\n${e.message}`);
+        if (this.dom.btnSyncNow) {
+          this.dom.btnSyncNow.textContent = "동기화";
+          this.dom.btnSyncNow.disabled = false;
+        }
       }
     }
   }
