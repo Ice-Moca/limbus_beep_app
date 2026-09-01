@@ -24,11 +24,17 @@ TEXT_DANGER = "#ff5252"
 FONT_FAMILY = "NeoDGM"
 
 def apply_app_theme(page: ft.Page):
-    """Flet 페이지 전체 테마 및 폰트 설정"""
+    """Flet 페이지 전체 테마, 윈도우 크기 및 폰트 설정"""
     page.title = "Limbus Beep - Pager Simulator"
     page.bgcolor = BG_MAIN
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 16
+    
+    # 데스크톱 윈도우 기본 및 최소 해상도 설정
+    page.window.width = 1040
+    page.window.height = 680
+    page.window.min_width = 720
+    page.window.min_height = 500
     
     # 폰트 등록
     page.fonts = {
