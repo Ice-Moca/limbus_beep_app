@@ -19,7 +19,6 @@ const DEFAULT_CONFIG = {
   volume: 80,
   orientation: 'landscape', // landscape | portrait | sensor (가로 모드 기본)
   ics_url: '',
-  sync_scope: 'today_upcoming', // today_upcoming | today | week | all_upcoming
   auto_sync_min: 60,
   decode_speed: 'normal',   // fast: 0.5s, normal: 0.9s, slow: 1.5s
   sound_type: 'file',       // file | synth
@@ -118,7 +117,6 @@ class PagerApp {
       // 설정 필드
       selectOrientation: document.getElementById('select-orientation'),
       inputIcsUrl: document.getElementById('input-ics-url'),
-      selectSyncScope: document.getElementById('select-sync-scope'),
       selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
       selectSoundType: document.getElementById('select-sound-type'),
@@ -669,7 +667,6 @@ class PagerApp {
   openModal() {
     this.dom.selectOrientation.value = this.config.orientation || 'landscape';
     this.dom.inputIcsUrl.value = this.config.ics_url || '';
-    if (this.dom.selectSyncScope) this.dom.selectSyncScope.value = this.config.sync_scope || 'today_upcoming';
     this.dom.sliderVolume.value = this.config.volume;
     this.dom.labelVolume.textContent = `${this.config.volume}%`;
     this.dom.selectAutoSync.value = String(this.config.auto_sync_min);
@@ -818,7 +815,6 @@ class PagerApp {
     const newConfig = {
       orientation: this.dom.selectOrientation.value || 'landscape',
       ics_url: this.dom.inputIcsUrl.value.trim(),
-      sync_scope: this.dom.selectSyncScope ? this.dom.selectSyncScope.value : 'today_upcoming',
       volume: parseInt(this.dom.sliderVolume.value, 10),
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
       decode_speed: this.dom.selectDecodeSpeed.value,
@@ -954,6 +950,43 @@ class PagerApp {
     }
   }
 
+  // ── 한국 표준시(KST, UTC+9) 기준 오늘(00:00:00 ~ 23:59:59.999) 범위 계산 ──
+  getKstTodayRange() {
+    const now = new Date();
+    // 브라우저 타임존 환경과 무관하게 Asia/Seoul 기준 날짜/시간 컴포넌트 추출
+    const kstFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      weekday: 'short'
+    });
+    const parts = kstFormatter.formatToParts(now);
+    const getPart = (type) => parts.find(p => p.type === type)?.value;
+    
+    const y = parseInt(getPart('year'), 10);
+    const m = parseInt(getPart('month'), 10) - 1; // 0-indexed
+    const d = parseInt(getPart('day'), 10);
+
+    // KST 00:00:00 ~ 23:59:59의 UTC 에포크 ms (KST = UTC+9)
+    const kstStartEpoch = Date.UTC(y, m, d, 0, 0, 0, 0) - (9 * 3600 * 1000);
+    const kstEndEpoch = Date.UTC(y, m, d, 23, 59, 59, 999) - (9 * 3600 * 1000);
+
+    const weekdayMap = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+    const dayOfWeek = weekdayMap[getPart('weekday')] ?? new Date(kstStartEpoch + 9 * 3600 * 1000).getUTCDay();
+
+    return {
+      year: y,
+      month: m,
+      day: d,
+      startEpoch: kstStartEpoch,
+      endEpoch: kstEndEpoch,
+      dayOfWeek: dayOfWeek, // 0=일, 1=월, 2=화, 3=수, 4=목, 5=금, 6=토
+      dateStr: `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    };
+  }
+
+  // ── iCal 날짜 문자열을 KST 기준 시간 객체로 정밀 파싱 ──
   parseIcsDate(val) {
     if (!val) return null;
     val = val.trim();
@@ -961,10 +994,22 @@ class PagerApp {
     const clean = val.replace('Z', '');
 
     if (clean.length === 8) {
+      // 종일 일정 (YYYYMMDD)
       const y = parseInt(clean.substring(0, 4), 10);
       const m = parseInt(clean.substring(4, 6), 10) - 1;
       const d = parseInt(clean.substring(6, 8), 10);
-      return { date: new Date(y, m, d, 0, 0, 0), isAllDay: true };
+      const startEpoch = Date.UTC(y, m, d, 0, 0, 0, 0) - (9 * 3600 * 1000);
+      const endEpoch = Date.UTC(y, m, d, 23, 59, 59, 999) - (9 * 3600 * 1000);
+      return {
+        year: y,
+        month: m,
+        day: d,
+        epoch: startEpoch,
+        endEpoch: endEpoch,
+        isAllDay: true,
+        hours: 0,
+        minutes: 0
+      };
     }
 
     if (clean.includes('T')) {
@@ -976,28 +1021,41 @@ class PagerApp {
       const mm = parseInt(tPart.substring(2, 4), 10) || 0;
       const ss = parseInt(tPart.substring(4, 6), 10) || 0;
 
+      let epoch = 0;
+      let kstH = hh;
+      let kstM = mm;
+
       if (isUtc) {
-        return { date: new Date(Date.UTC(y, m, d, hh, mm, ss)), isAllDay: false };
+        // UTC 시간인 경우 KST(+9시간)로 정확히 변환
+        epoch = Date.UTC(y, m, d, hh, mm, ss);
+        const kstDate = new Date(epoch + 9 * 3600 * 1000);
+        kstH = kstDate.getUTCHours();
+        kstM = kstDate.getUTCMinutes();
       } else {
-        return { date: new Date(y, m, d, hh, mm, ss), isAllDay: false };
+        // 로컬/TZID 시간인 경우 기본적으로 한국 시간(KST)으로 해석
+        epoch = Date.UTC(y, m, d, hh, mm, ss) - (9 * 3600 * 1000);
       }
+
+      return {
+        year: y,
+        month: m,
+        day: d,
+        epoch: epoch,
+        isAllDay: false,
+        hours: kstH,
+        minutes: kstM
+      };
     }
     return null;
   }
 
   parseIcsText(icsText) {
-    const scope = this.config.sync_scope || 'today_upcoming';
-    
     // 1. RFC 5545 라인 언폴딩 (줄바꿈 후 공백/탭 연속 처리)
     const cleanIcs = icsText.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').replace(/\r[ \t]/g, '');
     const lines = cleanIcs.split(/\r\n|\n|\r/);
 
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    
-    // 평가 윈도우 (오늘부터 최대 30일 이내의 반복 및 다가오는 일정 탐색)
-    const windowEnd = new Date(todayStart.getTime() + 30 * 24 * 3600 * 1000);
+    const kstToday = this.getKstTodayRange();
+    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
     const rawEvents = [];
     let inEvent = false;
@@ -1022,27 +1080,33 @@ class PagerApp {
       }
     }
 
-    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-    const occurrences = [];
+    const todayEvents = [];
 
     rawEvents.forEach(ev => {
       const dtstartStr = ev.DTSTART || "";
       if (!dtstartStr) return;
       const startParsed = this.parseIcsDate(dtstartStr);
-      if (!startParsed || !startParsed.date) return;
+      if (!startParsed) return;
 
       const dtendStr = ev.DTEND || "";
       let endParsed = dtendStr ? this.parseIcsDate(dtendStr) : null;
-      if (!endParsed || !endParsed.date) {
+      if (!endParsed) {
         const durMs = startParsed.isAllDay ? 24 * 3600 * 1000 : 3600 * 1000;
-        endParsed = { date: new Date(startParsed.date.getTime() + durMs), isAllDay: startParsed.isAllDay };
+        endParsed = {
+          epoch: startParsed.epoch + durMs,
+          isAllDay: startParsed.isAllDay,
+          hours: (startParsed.hours + (startParsed.isAllDay ? 0 : 1)) % 24,
+          minutes: startParsed.minutes
+        };
       }
 
-      const durationMs = Math.max(0, endParsed.date.getTime() - startParsed.date.getTime());
-      // 이스케이프 문자 복원 (\, \; \\ \n)
+      // 종일 일정의 종료일 보정: iCal DTEND(종일)는 exclusive(종료 익일 00:00)이므로 endEpoch 사용
+      const eventStartEpoch = startParsed.epoch;
+      const eventEndEpoch = startParsed.isAllDay ? (startParsed.endEpoch || (endParsed.epoch - 1000)) : endParsed.epoch;
+
       const summary = (ev.SUMMARY || "(제목 없음)").replace(/\\([,;Nn\\])/g, (m, c) => (c === 'n' || c === 'N') ? ' ' : c);
 
-      // 반복 일정(RRULE) 확장 계산
+      // ── 1. 반복 일정(RRULE)인 경우 오늘(KST) 발생 여부 체크 ──
       if (ev.RRULE) {
         const rrule = ev.RRULE;
         const freqMatch = rrule.match(/FREQ=([^;]+)/);
@@ -1051,127 +1115,90 @@ class PagerApp {
         const byDays = byDayMatch ? byDayMatch[1].toUpperCase().split(',') : [];
         const untilMatch = rrule.match(/UNTIL=([^;]+)/);
         const untilParsed = untilMatch ? this.parseIcsDate(untilMatch[1]) : null;
-        const untilDate = untilParsed ? untilParsed.date : null;
 
-        const loopStart = new Date(Math.max(todayStart.getTime(), new Date(startParsed.date.getFullYear(), startParsed.date.getMonth(), startParsed.date.getDate()).getTime()));
-        const loopEnd = untilDate ? new Date(Math.min(windowEnd.getTime(), untilDate.getTime())) : windowEnd;
+        // 시작일이 오늘 이후이면 아직 시작하지 않은 반복 일정
+        if (startParsed.epoch > kstToday.endEpoch) return;
+        // 종료일(UNTIL)이 오늘 이전이면 이미 종료된 반복 일정
+        if (untilParsed && untilParsed.epoch < kstToday.startEpoch) return;
 
-        let curDay = new Date(loopStart);
-        while (curDay <= loopEnd) {
-          let matches = false;
-          const curDayName = dayNames[curDay.getDay()];
+        let occursToday = false;
+        const todayDayName = dayNames[kstToday.dayOfWeek];
 
-          if (freq === 'DAILY') {
-            matches = true;
-          } else if (freq === 'WEEKLY') {
-            if (byDays.length > 0) {
-              matches = byDays.some(bd => bd.endsWith(curDayName));
-            } else {
-              matches = curDay.getDay() === startParsed.date.getDay();
-            }
-          } else if (freq === 'MONTHLY') {
-            matches = curDay.getDate() === startParsed.date.getDate();
-          } else if (freq === 'YEARLY') {
-            matches = (curDay.getMonth() === startParsed.date.getMonth() && curDay.getDate() === startParsed.date.getDate());
+        if (freq === 'DAILY') {
+          occursToday = true;
+        } else if (freq === 'WEEKLY') {
+          if (byDays.length > 0) {
+            occursToday = byDays.some(bd => bd.endsWith(todayDayName));
+          } else {
+            const startKstDate = new Date(startParsed.epoch + 9 * 3600 * 1000);
+            occursToday = (startKstDate.getUTCDay() === kstToday.dayOfWeek);
           }
+        } else if (freq === 'MONTHLY') {
+          occursToday = (startParsed.day === kstToday.day);
+        } else if (freq === 'YEARLY') {
+          occursToday = (startParsed.month === kstToday.month && startParsed.day === kstToday.day);
+        }
 
-          if (matches) {
-            const instStart = new Date(curDay.getFullYear(), curDay.getMonth(), curDay.getDate(), startParsed.date.getHours(), startParsed.date.getMinutes(), startParsed.date.getSeconds());
-            const instEnd = new Date(instStart.getTime() + durationMs);
-            occurrences.push({
-              summary,
-              startDate: instStart,
-              endDate: instEnd,
-              isAllDay: startParsed.isAllDay
-            });
-          }
-          curDay.setDate(curDay.getDate() + 1);
+        if (occursToday) {
+          todayEvents.push({
+            summary,
+            isAllDay: startParsed.isAllDay,
+            startHours: startParsed.hours,
+            startMinutes: startParsed.minutes,
+            endHours: endParsed.hours,
+            endMinutes: endParsed.minutes,
+            sortEpoch: Date.UTC(kstToday.year, kstToday.month, kstToday.day, startParsed.hours, startParsed.minutes, 0)
+          });
         }
       } else {
-        // 단일 일정: 오늘 이후 종료되는 모든 일정 수집
-        if (endParsed.date >= todayStart) {
-          occurrences.push({
+        // ── 2. 단일 / 다기간 일정: 오늘(한국시간 00시 ~ 24시)과 겹치는지 체크 ──
+        const overlapsToday = (eventStartEpoch <= kstToday.endEpoch && eventEndEpoch >= kstToday.startEpoch);
+        if (overlapsToday) {
+          todayEvents.push({
             summary,
-            startDate: startParsed.date,
-            endDate: endParsed.date,
-            isAllDay: startParsed.isAllDay
+            isAllDay: startParsed.isAllDay,
+            startHours: startParsed.hours,
+            startMinutes: startParsed.minutes,
+            endHours: endParsed.hours,
+            endMinutes: endParsed.minutes,
+            sortEpoch: eventStartEpoch
           });
         }
       }
     });
 
-    // 시간 순 정렬
-    occurrences.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+    // 오늘 일정 시간순 정렬
+    todayEvents.sort((a, b) => a.sortEpoch - b.sortEpoch);
 
-    // 중복 제거 (동일 요약 + 동일 시작 시간)
-    const uniqueOccurrences = [];
+    // 중복 제거
+    const unique = [];
     const seen = new Set();
-    occurrences.forEach(o => {
-      const key = `${o.summary}_${o.startDate.getTime()}`;
+    todayEvents.forEach(e => {
+      const key = `${e.summary}_${e.startHours}:${e.startMinutes}`;
       if (!seen.has(key)) {
         seen.add(key);
-        uniqueOccurrences.push(o);
+        unique.push(e);
       }
     });
 
-    // 동기화 범위(Scope) 필터링
-    let filtered = [];
-    if (scope === 'today') {
-      filtered = uniqueOccurrences.filter(o => {
-        return o.startDate <= todayEnd && o.endDate >= todayStart;
-      });
-      // 스마트 폴백: 오늘 일정이 1개 이하인데 다가오는 일정이 있다면 함께 채워줌
-      if (filtered.length <= 1 && uniqueOccurrences.length > filtered.length) {
-        filtered = uniqueOccurrences.slice(0, 12);
-      }
-    } else if (scope === 'week') {
-      const weekEnd = new Date(todayStart.getTime() + 7 * 24 * 3600 * 1000);
-      filtered = uniqueOccurrences.filter(o => o.startDate <= weekEnd && o.endDate >= todayStart);
-    } else {
-      // today_upcoming or all_upcoming (기본 15개)
-      filtered = uniqueOccurrences.filter(o => o.endDate >= todayStart).slice(0, 15);
-    }
-
-    return filtered;
+    return unique;
   }
 
   formatEvent(ev) {
-    const now = new Date();
-    const todayY = now.getFullYear();
-    const todayM = now.getMonth();
-    const todayD = now.getDate();
-
-    const sy = ev.startDate.getFullYear();
-    const sm = ev.startDate.getMonth();
-    const sd = ev.startDate.getDate();
-    const isToday = (sy === todayY && sm === todayM && sd === todayD);
-
-    const monthStr = String(sm + 1).padStart(2, '0');
-    const dayStr = String(sd).padStart(2, '0');
-    const dateLabel = isToday ? "오늘" : `${monthStr}/${dayStr}`;
-
-    let timeInfo = "";
-    if (ev.isAllDay) {
-      timeInfo = isToday ? "오늘 종일" : `${dateLabel} 종일`;
-    } else {
-      const sh = String(ev.startDate.getHours()).padStart(2, '0');
-      const smin = String(ev.startDate.getMinutes()).padStart(2, '0');
-      const eh = String(ev.endDate.getHours()).padStart(2, '0');
-      const emin = String(ev.endDate.getMinutes()).padStart(2, '0');
-
-      if (isToday) {
-        timeInfo = `${sh}:${smin} - ${eh}:${emin}`;
-      } else {
-        timeInfo = `${dateLabel} ${sh}:${smin} - ${eh}:${emin}`;
-      }
+    let timeInfo = "종일";
+    if (!ev.isAllDay) {
+      const sh = String(ev.startHours).padStart(2, '0');
+      const sm = String(ev.startMinutes).padStart(2, '0');
+      const eh = String(ev.endHours).padStart(2, '0');
+      const em = String(ev.endMinutes).padStart(2, '0');
+      timeInfo = `${sh}:${sm} - ${eh}:${em}`;
     }
-
     return { text: ev.summary, time_info: timeInfo };
   }
 
   distributeEventsTo3Stages(formattedEvents) {
     if (!formattedEvents || formattedEvents.length === 0) {
-      return [{ stage: 1, messages: [{ text: "등록된 캘린더 일정이 없습니다.", time_info: "오늘" }] }];
+      return [{ stage: 1, messages: [{ text: "오늘 등록된 일정이 없습니다.", time_info: "오늘" }] }];
     }
 
     const n = 3;
