@@ -229,9 +229,9 @@ class PagerApp {
       }
     });
 
-    // 7. 실시간 글자/배경 색상 프리셋 스와치 클릭
-    document.querySelectorAll('.palette-swatch').forEach(swatch => {
-      swatch.addEventListener('click', (e) => {
+    // 7. 실시간 글자/배경 색상 프리셋 원형 칩 클릭
+    document.querySelectorAll('.color-circle-chip[data-color]').forEach(chip => {
+      chip.addEventListener('click', (e) => {
         const type = e.currentTarget.dataset.type;
         const color = e.currentTarget.dataset.color;
         if (type === 'font') {
@@ -244,7 +244,7 @@ class PagerApp {
       });
     });
 
-    // 8. 프리미엄 사이버 컬러 모달 열기 버튼
+    // 8. 맨 마지막 무지개 원형 칩 클릭 시 커스텀 팝업 열기
     if (this.dom.btnOpenColorPickerFont) {
       this.dom.btnOpenColorPickerFont.addEventListener('click', () => {
         this.openCustomColorModal('font');
@@ -347,16 +347,27 @@ class PagerApp {
     if (tagFontHex) tagFontHex.textContent = fc;
     if (tagBgHex) tagBgHex.textContent = bc;
 
-    // 활성 프리셋 스와치 시각화
-    document.querySelectorAll('.palette-swatch[data-type="font"]').forEach(swatch => {
-      swatch.classList.toggle('active', swatch.dataset.color.toUpperCase() === fc);
+    // 글자 색상 원형 칩 활성화 상태 표시
+    let fontPresetMatched = false;
+    document.querySelectorAll('.color-circle-chip[data-type="font"][data-color]').forEach(chip => {
+      const isMatch = chip.dataset.color.toUpperCase() === fc;
+      chip.classList.toggle('active', isMatch);
+      if (isMatch) fontPresetMatched = true;
     });
-    document.querySelectorAll('.palette-swatch[data-type="bg"]').forEach(swatch => {
-      swatch.classList.toggle('active', swatch.dataset.color.toUpperCase() === bc);
-    });
+    if (this.dom.btnOpenColorPickerFont) {
+      this.dom.btnOpenColorPickerFont.classList.toggle('active', !fontPresetMatched);
+    }
 
-    if (this.dom.pickerFontColor) this.dom.pickerFontColor.value = fc.length === 7 ? fc : '#2FBFFC';
-    if (this.dom.pickerBgColor) this.dom.pickerBgColor.value = bc.length === 7 ? bc : '#000000';
+    // 배경 색상 원형 칩 활성화 상태 표시
+    let bgPresetMatched = false;
+    document.querySelectorAll('.color-circle-chip[data-type="bg"][data-color]').forEach(chip => {
+      const isMatch = chip.dataset.color.toUpperCase() === bc;
+      chip.classList.toggle('active', isMatch);
+      if (isMatch) bgPresetMatched = true;
+    });
+    if (this.dom.btnOpenColorPickerBg) {
+      this.dom.btnOpenColorPickerBg.classList.toggle('active', !bgPresetMatched);
+    }
   }
 
   applyOrientation(mode) {

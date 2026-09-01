@@ -412,91 +412,63 @@ html, body {
   transition: all 0.2s ease;
 }
 
-.palette-chips-wrap {
+.color-chips-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 0;
 }
 
-.palette-swatch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  background: #04090f;
-  border: 1px solid #142535;
-  border-radius: 16px;
+.color-circle-chip {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
   cursor: pointer;
   outline: none;
-  font-family: var(--font-main);
-  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.palette-swatch:hover {
-  border-color: var(--swatch-color, var(--cyan-primary));
-  background: rgba(255, 255, 255, 0.04);
-  transform: translateY(-1px);
-}
-
-.palette-swatch.active {
-  border-color: var(--swatch-color, var(--cyan-primary)) !important;
-  background: rgba(47, 191, 252, 0.12);
-  box-shadow: 0 0 10px rgba(47, 191, 252, 0.3);
-  transform: scale(1.03);
-}
-
-.swatch-circle {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
-}
-
-.swatch-name {
-  font-size: 11px;
-  color: #dbe4eb;
-  letter-spacing: 0.5px;
-}
-
-.palette-custom-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 11px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(47, 191, 252, 0.1), rgba(213, 0, 249, 0.1));
-  border: 1px dashed var(--cyan-dim);
-  cursor: pointer;
-  font-family: var(--font-main);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s ease, box-shadow 0.18s ease;
   position: relative;
-  transition: all 0.2s ease;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.palette-custom-btn:hover {
-  border-color: var(--cyan-primary);
-  background: linear-gradient(135deg, rgba(47, 191, 252, 0.2), rgba(213, 0, 249, 0.2));
-  transform: translateY(-1px);
-  box-shadow: 0 0 10px var(--cyan-glow);
+.color-circle-chip:hover {
+  transform: scale(1.2);
 }
 
-.custom-icon {
-  font-size: 12px;
+.color-circle-chip.active {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.9);
+  transform: scale(1.15);
 }
 
-.custom-label {
-  font-size: 11px;
-  color: var(--cyan-primary);
+/* 맨 마지막 커스텀 팝업 트리거 레인보우 동그라미 */
+.picker-circle-trigger {
+  background: conic-gradient(from 0deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.35);
+}
+
+.picker-circle-trigger:hover {
+  transform: scale(1.25) rotate(15deg);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.8);
+  border-color: #ffffff !important;
+}
+
+.picker-circle-trigger.active {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.9);
+}
+
+.picker-plus-icon {
+  font-size: 14px;
   font-weight: bold;
-}
-
-.hidden-color-input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
+  color: #ffffff;
+  text-shadow: 0 0 4px #000000, 0 0 2px #000000;
+  line-height: 1;
 }
 
 
