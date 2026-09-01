@@ -45,7 +45,7 @@ const DEFAULT_MESSAGES = [
   {
     stage: 3,
     messages: [
-      { text: "오늘 하루도 수고하셨습니다. _CLEAR._", time_info: "20:00 - 21:00" }
+      { text: "오늘 하루도 수고하셨습니다.", time_info: "20:00 - 21:00" }
     ]
   }
 ];
@@ -397,16 +397,17 @@ class PagerApp {
         this.currentMsgIdx++;
         this.startBeeping();
       } else {
-        this.startClear();
+        const isLastStage = (this.currentStageIdx + 1 >= this.messages.length);
+        if (isLastStage) {
+          this.startComplete();
+        } else {
+          this.startClear();
+        }
       }
     } else if (this.state === STATE.CLEAR) {
       this.currentStageIdx++;
       this.currentMsgIdx = 0;
-      if (this.currentStageIdx >= this.messages.length) {
-        this.startComplete();
-      } else {
-        this.startBeeping();
-      }
+      this.startBeeping();
     } else if (this.state === STATE.COMPLETE) {
       this.currentStageIdx = 0;
       this.currentMsgIdx = 0;
@@ -541,13 +542,13 @@ class PagerApp {
     this.clearTimers();
     this.state = STATE.COMPLETE;
 
-    this.dom.displayDots.textContent = "━━ ALL CLEAR ━━";
-    this.dom.displaySubLabel.textContent = "모든 메시지 수신 완료";
+    this.dom.displayDots.textContent = "";
+    this.dom.displaySubLabel.textContent = "";
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
 
-    this.dom.displayMain.textContent = "수감자 배정 일정 완료";
-    this.dom.displayMain.className = 'main-text accent';
+    this.dom.displayMain.textContent = "_ALL_CLEAR._";
+    this.dom.displayMain.className = 'main-text amber';
   }
 
   updateDisplayIdle() {
