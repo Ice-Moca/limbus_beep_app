@@ -370,8 +370,28 @@ class PagerApp {
       return;
     }
 
-    const clientId = this.config.google_client_id || "889981242318-q7v5hph7l7q5r34p8c23h4kfffl9e7da.apps.googleusercontent.com";
+    const clientId = this.config.google_client_id || "62267119906-vmtpf5lna011f2jo8a6djamllb13c7io.apps.googleusercontent.com";
 
+    // 1. Google Identity Services (GIS) Token Client 시도 (구글 공식 권장)
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+      try {
+        const tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email',
+          callback: async (resp) => {
+            if (resp && resp.access_token) {
+              await this.onOAuthTokenReceived(resp.access_token);
+            }
+          },
+        });
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+        return;
+      } catch (gisErr) {
+        console.warn("GIS initTokenClient fallback to popup:", gisErr);
+      }
+    }
+
+    // 2. Standalone Popup Flow Fallback (모바일 웹뷰 / 브라우저 팝업)
     try {
       const redirectUri = window.location.origin && !window.location.origin.startsWith('file:') 
         ? `${window.location.origin}${window.location.pathname}` 
