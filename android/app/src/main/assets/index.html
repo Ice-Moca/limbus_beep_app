@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>단테 삐삐</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Google Identity Services SDK -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <!-- CRT 스캔라인 & 비네팅 오버레이 -->
@@ -66,7 +64,7 @@
   <div id="settings-modal" class="modal-overlay hidden">
     <div class="modal-card">
       
-      <!-- 모달 헤더 (영어/서브텍스트 제거, 순수 한글 타이틀) -->
+      <!-- 모달 헤더 (순수 한글 타이틀) -->
       <div class="modal-header">
         <div class="modal-title-group">
           <div class="modal-title">
@@ -89,39 +87,19 @@
         </button>
       </div>
 
-      <!-- 모달 본문 영역 (작은 설명글 전면 제거) -->
+      <!-- 모달 본문 영역 -->
       <div class="modal-body">
         
-        <!-- ── 탭 1: 캘린더 연동 ── -->
+        <!-- ── 탭 1: 캘린더 연동 (iCal 전용) ── -->
         <div id="tab-calendar" class="tab-pane active">
           
-          <!-- 구글 계정 로그인 카드 -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <span class="card-tag">Google 캘린더 연동</span>
-            </div>
-
-            <div class="oauth-action-row">
-              <button id="btn-google-login" class="btn btn-google">
-                <span class="btn-g-logo">G</span>
-                <span id="google-login-text">Google 계정으로 로그인</span>
-              </button>
-              <button id="btn-google-logout" class="btn btn-danger-outline hidden">연결 해제</button>
-            </div>
-
-            <div id="oauth-account-info" class="oauth-account-status hidden">
-              <span class="status-dot-active"></span>
-              <span id="oauth-account-email">연동 완료</span>
-            </div>
-          </div>
-
           <!-- iCal 비공개 URL 연동 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">iCal 비공개 주소 연동</span>
+              <span class="card-tag">Google 캘린더 iCal 연동</span>
             </div>
             <div class="input-with-btn">
-              <input type="text" id="input-ics-url" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics" autocomplete="off" spellcheck="false">
+              <input type="text" id="input-ics-url" placeholder="Google 캘린더 iCal 비공개 주소 입력 (https://.../basic.ics)" autocomplete="off" spellcheck="false">
               <button id="btn-sync-now" class="btn btn-primary">동기화</button>
             </div>
           </div>

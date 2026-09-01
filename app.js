@@ -25,9 +25,6 @@ const DEFAULT_CONFIG = {
   theme_color: 'cyan',      // cyan | amber | green
   scanlines: true,
   vignette: true,
-  google_client_id: '',
-  google_token: '',
-  google_email: '',
 };
 
 const DEFAULT_MESSAGES = [
@@ -35,7 +32,7 @@ const DEFAULT_MESSAGES = [
     stage: 1,
     messages: [
       { text: "관리자님, 오늘의 일정을 확인하십시오.", time_info: "09:00 - 10:00" },
-      { text: "설정에서 구글 캘린더를 연동할 수 있습니다.", time_info: "11:00 - 12:00" }
+      { text: "설정에서 구글 캘린더 iCal을 연동할 수 있습니다.", time_info: "11:00 - 12:00" }
     ]
   },
   {
@@ -70,7 +67,6 @@ class PagerApp {
     this.initDOM();
     this.bindEvents();
     this.applySettings();
-    this.initGoogleOAuth();
     this.startClock();
     this.updateDisplay();
 
@@ -106,16 +102,7 @@ class PagerApp {
       btnSaveSettings: document.getElementById('btn-save-settings'),
       btnResetDefault: document.getElementById('btn-reset-default'),
       btnSyncNow: document.getElementById('btn-sync-now'),
-      btnPasteClipboard: document.getElementById('btn-paste-clipboard'),
       btnTestSound: document.getElementById('btn-test-sound'),
-      
-      // Google 로그인 관련
-      inputGoogleClientId: document.getElementById('input-google-client-id'),
-      btnGoogleLogin: document.getElementById('btn-google-login'),
-      btnGoogleLogout: document.getElementById('btn-google-logout'),
-      googleLoginText: document.getElementById('google-login-text'),
-      oauthAccountInfo: document.getElementById('oauth-account-info'),
-      oauthAccountEmail: document.getElementById('oauth-account-email'),
       
       // 메시지 & STAGE 조절기
       btnAddStage: document.getElementById('btn-add-stage'),
@@ -185,22 +172,7 @@ class PagerApp {
       if (e.target === this.dom.modal) this.closeModal();
     });
 
-    // 4. 클립보드 붙여넣기 버튼
-    if (this.dom.btnPasteClipboard) {
-      this.dom.btnPasteClipboard.addEventListener('click', async () => {
-        try {
-          const text = await navigator.clipboard.readText();
-          if (text) {
-            this.dom.inputIcsUrl.value = text.trim();
-            this.showToast("클립보드 내용을 붙여넣었습니다.");
-          }
-        } catch (err) {
-          this.showToast("클립보드 권한이 필요합니다. 직접 붙여넣으세요.");
-        }
-      });
-    }
-
-    // 5. 모달 탭 전환
+    // 4. 모달 탭 전환
     this.dom.tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         this.dom.tabBtns.forEach(b => b.classList.remove('active'));
@@ -210,19 +182,19 @@ class PagerApp {
       });
     });
 
-    // 6. STAGE 동적 추가
+    // 5. STAGE 동적 추가
     this.dom.btnAddStage.addEventListener('click', () => {
       this.syncCustomBufferFromDOM();
       const newStageNum = this.customStages.length + 1;
       this.customStages.push({
         stage: newStageNum,
-        messages: [{ text: `새 일정 메시지 ${newStageNum}`, time_info: "" }]
+        messages: [{ text: `새 일정 메시지`, time_info: "" }]
       });
       this.renderCustomStageCards();
-      this.showToast(`STAGE ${newStageNum} 추가됨`);
+      this.showToast(`단계 ${newStageNum} 추가됨`);
     });
 
-    // 7. 볼륨 슬라이더
+    // 6. 볼륨 슬라이더
     this.dom.sliderVolume.addEventListener('input', (e) => {
       this.dom.labelVolume.textContent = `${e.target.value}%`;
     });
@@ -237,44 +209,40 @@ class PagerApp {
       }
     });
 
-    // 8. 실시간 테마 컬러 미리보기
+    // 7. 실시간 테마 컬러 미리보기
     this.dom.selectThemeColor.addEventListener('change', (e) => {
       this.applyThemeClass(e.target.value);
     });
 
-    // 9. 화면 방향 변경
+    // 8. 화면 방향 변경
     this.dom.selectOrientation.addEventListener('change', (e) => {
       this.applyOrientation(e.target.value);
     });
 
-    // 10. Google 로그인 & 로그아웃
-    this.dom.btnGoogleLogin.addEventListener('click', () => this.handleGoogleSignIn());
-    this.dom.btnGoogleLogout.addEventListener('click', () => this.handleGoogleSignOut());
-
-    // 11. 설정 저장 및 기본값 복원
+    // 9. 설정 저장 및 기본값 복원
     this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
     this.dom.btnResetDefault.addEventListener('click', () => this.resetDefaults());
 
-    // 12. 캘린더 즉시 동기화
+    // 10. 캘린더 즉시 동기화
     this.dom.btnSyncNow.addEventListener('click', () => {
       const url = this.dom.inputIcsUrl.value.trim();
       this.syncCalendar(url);
     });
 
-    // 13. 메시지 에디터 툴바
+    // 11. 메시지 에디터 툴바
     this.dom.btnLoadSample.addEventListener('click', () => {
       this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
       this.renderCustomStageCards();
-      this.showToast("기본 3단계 예시가 로드되었습니다.");
+      this.showToast("기본 예시 메시지가 로드되었습니다.");
     });
 
     this.dom.btnClearMessages.addEventListener('click', () => {
-      this.customStages = [{ stage: 1, messages: [] }];
+      this.customStages = [{ stage: 1, messages: [{ text: "새 메시지", time_info: "" }] }];
       this.renderCustomStageCards();
-      this.showToast("메시지 입력란을 모두 비웠습니다.");
+      this.showToast("메시지 입력란을 초기화했습니다.");
     });
 
-    // 14. 작성된 STAGE 삐삐 적용
+    // 12. 작성된 STAGE 삐삐 적용
     this.dom.btnApplyCustom.addEventListener('click', () => this.applyCustomStages());
   }
 
@@ -340,175 +308,10 @@ class PagerApp {
       this.dom.crtOverlay.style.display = this.config.scanlines ? 'block' : 'none';
     }
     if (this.dom.crtVignette) {
-      this.dom.crtVignette.style.display = this.config.vignette ? 'block' : 'none';
+      this.dom.crtVignette.style.display = this.config.vignette !== false;
     }
     this.applyThemeClass(this.config.theme_color || 'cyan');
     this.applyOrientation(this.config.orientation || 'landscape');
-  }
-
-  // ── Google OAuth 간편 로그인 연동 ──
-  initGoogleOAuth() {
-    this.updateGoogleUI();
-  }
-
-  updateGoogleUI() {
-    if (this.config.google_token) {
-      this.dom.googleLoginText.textContent = "Google 캘린더 즉시 재동기화";
-      this.dom.oauthAccountInfo.classList.remove('hidden');
-      this.dom.oauthAccountEmail.textContent = this.config.google_email ? `${this.config.google_email} 연동됨` : "Google 계정 연동 완료";
-      this.dom.btnGoogleLogout.classList.remove('hidden');
-    } else {
-      this.dom.googleLoginText.textContent = "Google 계정으로 로그인하여 동기화";
-      this.dom.oauthAccountInfo.classList.add('hidden');
-      this.dom.btnGoogleLogout.classList.add('hidden');
-    }
-  }
-
-  async handleGoogleSignIn() {
-    if (this.config.google_token) {
-      await this.fetchGoogleCalendarApi(this.config.google_token);
-      return;
-    }
-
-    const clientId = this.config.google_client_id || "801016649024-hauetgafmiv9jlcelj8a0hbv0of05hok.apps.googleusercontent.com";
-
-    // 1. Google Identity Services (GIS) Token Client 시도 (구글 공식 권장)
-    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
-      try {
-        const tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email',
-          callback: async (resp) => {
-            if (resp && resp.access_token) {
-              await this.onOAuthTokenReceived(resp.access_token);
-            }
-          },
-        });
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-        return;
-      } catch (gisErr) {
-        console.warn("GIS initTokenClient fallback to popup:", gisErr);
-      }
-    }
-
-    // 2. Standalone Popup Flow Fallback (모바일 웹뷰 / 브라우저 팝업)
-    try {
-      const redirectUri = window.location.origin && !window.location.origin.startsWith('file:') 
-        ? `${window.location.origin}${window.location.pathname}` 
-        : 'http://localhost:8765/index.html';
-      const scope = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email';
-
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}&prompt=consent`;
-
-      const width = 500;
-      const height = 620;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-      const popup = window.open(authUrl, 'google_login_popup', `width=${width},height=${height},top=${top},left=${left}`);
-
-      this.showToast("구글 계정 로그인 창이 열립니다.");
-
-      const pollTimer = setInterval(async () => {
-        try {
-          if (!popup || popup.closed) {
-            clearInterval(pollTimer);
-            return;
-          }
-          if (popup.location.href && popup.location.href.includes("access_token=")) {
-            const hash = popup.location.hash.substring(1);
-            const params = new URLSearchParams(hash);
-            const token = params.get("access_token");
-            if (token) {
-              popup.close();
-              clearInterval(pollTimer);
-              await this.onOAuthTokenReceived(token);
-            }
-          }
-        } catch (e) {}
-      }, 500);
-
-    } catch (err) {
-      console.warn(err);
-      this.showToast("팝업이 차단되었는지 확인하세요.");
-    }
-  }
-
-  async onOAuthTokenReceived(token) {
-    if (!token) return;
-    this.config.google_token = token;
-    
-    try {
-      const userResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (userResp.ok) {
-        const userData = await userResp.json();
-        this.config.google_email = userData.email || '';
-      }
-    } catch (e) {}
-
-    this.saveConfig(this.config);
-    this.updateGoogleUI();
-    this.showToast("Google 계정 로그인 성공!");
-    await this.fetchGoogleCalendarApi(token);
-  }
-
-  handleGoogleSignOut() {
-    this.config.google_token = '';
-    this.config.google_email = '';
-    this.saveConfig(this.config);
-    this.updateGoogleUI();
-    this.showToast("Google 계정 연결이 해제되었습니다.");
-  }
-
-  async fetchGoogleCalendarApi(token) {
-    this.showToast("Google 캘린더에서 오늘의 일정을 가져오는 중...");
-    try {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-
-      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${startOfDay.toISOString()}&timeMax=${endOfDay.toISOString()}&singleEvents=true&orderBy=startTime`;
-      const resp = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!resp.ok) {
-        if (resp.status === 401) {
-          this.config.google_token = '';
-          this.saveConfig(this.config);
-          this.updateGoogleUI();
-          throw new Error("로그인 토큰이 만료되었습니다. 다시 로그인해주세요.");
-        }
-        throw new Error(`API 응답 오류: ${resp.statusText}`);
-      }
-
-      const data = await resp.json();
-      const items = data.items || [];
-      const events = items.map(item => {
-        const summary = item.summary || "(제목 없음)";
-        let timeInfo = "종일";
-        if (item.start && item.start.dateTime) {
-          const s = new Date(item.start.dateTime);
-          const e = item.end && item.end.dateTime ? new Date(item.end.dateTime) : null;
-          const sStr = `${String(s.getHours()).padStart(2, '0')}:${String(s.getMinutes()).padStart(2, '0')}`;
-          if (e) {
-            const eStr = `${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}`;
-            timeInfo = `${sStr} - ${eStr}`;
-          } else {
-            timeInfo = sStr;
-          }
-        }
-        return { text: summary, time_info: timeInfo };
-      });
-
-      const stages = this.distributeEventsTo3Stages(events);
-      this.saveStoredMessages(stages);
-      this.showToast(`오늘 일정 ${events.length}개를 가져와 [메시지 & STAGE]에 채웠습니다.`);
-    } catch (err) {
-      console.error(err);
-      alert(`Google Calendar 동기화 실패: ${err.message}`);
-    }
   }
 
   // ── 오디오 재생 ──
@@ -631,7 +434,7 @@ class PagerApp {
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayTime.classList.remove('visible');
     this.dom.displayMain.className = 'main-text dimmed';
-    this.dom.displaySubLabel.textContent = "신호 수신 중 (RECEIVING)...";
+    this.dom.displaySubLabel.textContent = "신호 수신 중...";
 
     const msg = this.getCurrentMessage();
     const cipherLen = msg ? Math.max(9, msg.text.length) : 11;
@@ -779,9 +582,6 @@ class PagerApp {
   // ── 설정 모달 열기/닫기 ──
   openModal() {
     this.dom.selectOrientation.value = this.config.orientation || 'landscape';
-    if (this.dom.inputGoogleClientId) {
-      this.dom.inputGoogleClientId.value = this.config.google_client_id || '';
-    }
     this.dom.inputIcsUrl.value = this.config.ics_url || '';
     this.dom.sliderVolume.value = this.config.volume;
     this.dom.labelVolume.textContent = `${this.config.volume}%`;
@@ -791,8 +591,6 @@ class PagerApp {
     this.dom.selectThemeColor.value = this.config.theme_color || 'cyan';
     this.dom.toggleScanlines.checked = this.config.scanlines;
     this.dom.toggleVignette.checked = this.config.vignette !== false;
-
-    this.updateGoogleUI();
 
     // 사용자가 추가/편집한 STAGE 목록 복원 및 렌더링
     this.customStages = JSON.parse(JSON.stringify(this.messages));
@@ -932,7 +730,6 @@ class PagerApp {
 
     const newConfig = {
       orientation: this.dom.selectOrientation.value || 'landscape',
-      google_client_id: (this.dom.inputGoogleClientId?.value || '').trim(),
       ics_url: this.dom.inputIcsUrl.value.trim(),
       volume: parseInt(this.dom.sliderVolume.value, 10),
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
@@ -988,14 +785,14 @@ class PagerApp {
       this.saveConfig(this.config);
 
       if (!isSilent) {
-        this.showToast(`오늘 일정 ${events.length}개를 가져와 [메시지 & STAGE]에 채웠습니다.`);
-        this.dom.btnSyncNow.textContent = "즉시 동기화";
+        this.showToast(`오늘 일정 ${events.length}개를 가져와 [메시지 관리]에 채웠습니다.`);
+        this.dom.btnSyncNow.textContent = "동기화";
       }
     } catch (e) {
       console.error("동기화 실패:", e);
       if (!isSilent) {
         alert(`캘린더 동기화 실패: ${e.message}`);
-        this.dom.btnSyncNow.textContent = "즉시 동기화";
+        this.dom.btnSyncNow.textContent = "동기화";
       }
     }
   }
