@@ -421,6 +421,26 @@ class PagerApp {
     }
   }
 
+  async onOAuthTokenReceived(token) {
+    if (!token) return;
+    this.config.google_token = token;
+    
+    try {
+      const userResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (userResp.ok) {
+        const userData = await userResp.json();
+        this.config.google_email = userData.email || '';
+      }
+    } catch (e) {}
+
+    this.saveConfig(this.config);
+    this.updateGoogleUI();
+    this.showToast("Google 계정 로그인 성공!");
+    await this.fetchGoogleCalendarApi(token);
+  }
+
   handleGoogleSignOut() {
     this.config.google_token = '';
     this.config.google_email = '';
