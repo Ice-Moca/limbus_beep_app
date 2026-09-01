@@ -22,7 +22,8 @@ const DEFAULT_CONFIG = {
   auto_sync_min: 60,
   decode_speed: 'normal',   // fast: 0.5s, normal: 0.9s, slow: 1.5s
   sound_type: 'file',       // file | synth
-  theme_color: 'cyan',      // cyan | amber | green
+  font_color: '#2fbffc',    // 단테 블루 기본
+  bg_color: '#000000',      // 딥 블랙 기본
   scanlines: true,
   vignette: true,
 };
@@ -118,7 +119,8 @@ class PagerApp {
       selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
       selectSoundType: document.getElementById('select-sound-type'),
-      selectThemeColor: document.getElementById('select-theme-color'),
+      pickerFontColor: document.getElementById('picker-font-color'),
+      pickerBgColor: document.getElementById('picker-bg-color'),
       sliderVolume: document.getElementById('slider-volume'),
       labelVolume: document.getElementById('label-volume'),
       toggleScanlines: document.getElementById('toggle-scanlines'),
@@ -209,27 +211,49 @@ class PagerApp {
       }
     });
 
-    // 7. 실시간 테마 컬러 미리보기
-    this.dom.selectThemeColor.addEventListener('change', (e) => {
-      this.applyThemeClass(e.target.value);
+    // 7. 실시간 글자/배경 색상 프리셋 칩 클릭
+    document.querySelectorAll('.color-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        const type = e.currentTarget.dataset.type;
+        const color = e.currentTarget.dataset.color;
+        if (type === 'font') {
+          if (this.dom.pickerFontColor) this.dom.pickerFontColor.value = color;
+          this.applyCustomColors(color, this.dom.pickerBgColor ? this.dom.pickerBgColor.value : '#000000');
+        } else if (type === 'bg') {
+          if (this.dom.pickerBgColor) this.dom.pickerBgColor.value = color;
+          this.applyCustomColors(this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2fbffc', color);
+        }
+      });
     });
 
-    // 8. 화면 방향 변경
+    // 8. 컬러 피커 직접 선택 실시간 반영
+    if (this.dom.pickerFontColor) {
+      this.dom.pickerFontColor.addEventListener('input', (e) => {
+        this.applyCustomColors(e.target.value, this.dom.pickerBgColor ? this.dom.pickerBgColor.value : '#000000');
+      });
+    }
+    if (this.dom.pickerBgColor) {
+      this.dom.pickerBgColor.addEventListener('input', (e) => {
+        this.applyCustomColors(this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2fbffc', e.target.value);
+      });
+    }
+
+    // 9. 화면 방향 변경
     this.dom.selectOrientation.addEventListener('change', (e) => {
       this.applyOrientation(e.target.value);
     });
 
-    // 9. 설정 저장 및 기본값 복원
+    // 10. 설정 저장 및 기본값 복원
     this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
     this.dom.btnResetDefault.addEventListener('click', () => this.resetDefaults());
 
-    // 10. 캘린더 즉시 동기화
+    // 11. 캘린더 즉시 동기화
     this.dom.btnSyncNow.addEventListener('click', () => {
       const url = this.dom.inputIcsUrl.value.trim();
       this.syncCalendar(url);
     });
 
-    // 11. 메시지 에디터 툴바
+    // 12. 메시지 에디터 툴바
     this.dom.btnLoadSample.addEventListener('click', () => {
       this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
       this.renderCustomStageCards();
@@ -242,7 +266,7 @@ class PagerApp {
       this.showToast("메시지 입력란을 초기화했습니다.");
     });
 
-    // 12. 작성된 STAGE 삐삐 적용
+    // 13. 작성된 STAGE 삐삐 적용
     this.dom.btnApplyCustom.addEventListener('click', () => this.applyCustomStages());
   }
 
@@ -281,10 +305,25 @@ class PagerApp {
     this.renderCustomStageCards();
   }
 
-  applyThemeClass(themeName) {
-    document.body.className = '';
-    if (themeName === 'amber') document.body.classList.add('theme-amber');
-    else if (themeName === 'green') document.body.classList.add('theme-green');
+  applyCustomColors(fontColor, bgColor) {
+    const fc = fontColor || this.config.font_color || '#2fbffc';
+    const bc = bgColor || this.config.bg_color || '#000000';
+
+    document.documentElement.style.setProperty('--cyan-primary', fc);
+    document.documentElement.style.setProperty('--bg-color', bc);
+    document.documentElement.style.setProperty('--cyan-glow', `${fc}88`);
+    document.body.style.backgroundColor = bc;
+    if (this.dom.app) this.dom.app.style.backgroundColor = bc;
+
+    // 활성 프리셋 칩 시각화
+    document.querySelectorAll('.color-chip[data-type="font"]').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.color.toLowerCase() === fc.toLowerCase());
+    });
+    document.querySelectorAll('.color-chip[data-type="bg"]').forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.color.toLowerCase() === bc.toLowerCase());
+    });
+    if (this.dom.pickerFontColor) this.dom.pickerFontColor.value = fc;
+    if (this.dom.pickerBgColor) this.dom.pickerBgColor.value = bc;
   }
 
   applyOrientation(mode) {
@@ -310,7 +349,7 @@ class PagerApp {
     if (this.dom.crtVignette) {
       this.dom.crtVignette.style.display = this.config.vignette !== false;
     }
-    this.applyThemeClass(this.config.theme_color || 'cyan');
+    this.applyCustomColors(this.config.font_color, this.config.bg_color);
     this.applyOrientation(this.config.orientation || 'landscape');
   }
 
@@ -589,9 +628,9 @@ class PagerApp {
     this.dom.selectAutoSync.value = String(this.config.auto_sync_min);
     this.dom.selectDecodeSpeed.value = this.config.decode_speed;
     this.dom.selectSoundType.value = this.config.sound_type || 'file';
-    this.dom.selectThemeColor.value = this.config.theme_color || 'cyan';
     this.dom.toggleScanlines.checked = this.config.scanlines;
     this.dom.toggleVignette.checked = this.config.vignette !== false;
+    this.applyCustomColors(this.config.font_color, this.config.bg_color);
 
     // 사용자가 추가/편집한 STAGE 목록 복원 및 렌더링
     this.customStages = JSON.parse(JSON.stringify(this.messages));
@@ -736,7 +775,8 @@ class PagerApp {
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
       decode_speed: this.dom.selectDecodeSpeed.value,
       sound_type: this.dom.selectSoundType.value,
-      theme_color: this.dom.selectThemeColor.value,
+      font_color: this.dom.pickerFontColor ? this.dom.pickerFontColor.value : '#2fbffc',
+      bg_color: this.dom.pickerBgColor ? this.dom.pickerBgColor.value : '#000000',
       scanlines: this.dom.toggleScanlines.checked,
       vignette: this.dom.toggleVignette.checked,
     };

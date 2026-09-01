@@ -194,14 +194,33 @@
               </label>
             </div>
 
-            <!-- 테마 컬러 -->
+            <!-- 글자 색상 -->
             <div class="option-row">
-              <div class="option-title">테마 컬러</div>
-              <select id="select-theme-color" class="cyber-select">
-                <option value="cyan" selected>단테 시안</option>
-                <option value="amber">황금가지 앰버</option>
-                <option value="green">레트로 그린</option>
-              </select>
+              <div class="option-title">글자 색상</div>
+              <div class="color-picker-control">
+                <div class="color-chips-group">
+                  <button type="button" class="color-chip" data-type="font" data-color="#2fbffc" style="background:#2fbffc;" title="단테 블루 (기본)"></button>
+                  <button type="button" class="color-chip" data-type="font" data-color="#ff9d00" style="background:#ff9d00;" title="황금가지 앰버"></button>
+                  <button type="button" class="color-chip" data-type="font" data-color="#00e676" style="background:#00e676;" title="레트로 그린"></button>
+                  <button type="button" class="color-chip" data-type="font" data-color="#ff5252" style="background:#ff5252;" title="네온 레드"></button>
+                  <button type="button" class="color-chip" data-type="font" data-color="#ffffff" style="background:#ffffff;" title="화이트"></button>
+                </div>
+                <input type="color" id="picker-font-color" value="#2fbffc" class="cyber-color-input" title="직접 색상 선택">
+              </div>
+            </div>
+
+            <!-- 배경 색상 -->
+            <div class="option-row">
+              <div class="option-title">배경 색상</div>
+              <div class="color-picker-control">
+                <div class="color-chips-group">
+                  <button type="button" class="color-chip" data-type="bg" data-color="#000000" style="background:#000000; border:1px solid #444;" title="딥 블랙 (기본)"></button>
+                  <button type="button" class="color-chip" data-type="bg" data-color="#060e17" style="background:#060e17; border:1px solid #444;" title="다크 네이비"></button>
+                  <button type="button" class="color-chip" data-type="bg" data-color="#0a140a" style="background:#0a140a; border:1px solid #444;" title="다크 올리브"></button>
+                  <button type="button" class="color-chip" data-type="bg" data-color="#140609" style="background:#140609; border:1px solid #444;" title="다크 버건디"></button>
+                </div>
+                <input type="color" id="picker-bg-color" value="#000000" class="cyber-color-input" title="직접 색상 선택">
+              </div>
             </div>
           </div>
 
