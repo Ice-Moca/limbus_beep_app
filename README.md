@@ -1,4 +1,4 @@
-# 📟 Limbus Beep App (단테 삐삐 Android APK & Web)
+# Limbus Beep App (단테 삐삐 Android APK & Web)
 
 림버스 컴퍼니(Limbus Company)의 관리자 단테 PDA/삐삐 컨셉을 완벽 재현한 **안드로이드 네이티브 앱 & 웹 시뮬레이터**입니다.
 
@@ -6,16 +6,16 @@
 
 ---
 
-## 📱 안드로이드 APK 다운로드
+## 안드로이드 APK 다운로드
 
 스마트폰에 설치하여 바로 사용하실 수 있는 **5.7MB 초경량 네이티브 앱**입니다.
 
-* 📥 **[최신 APK 다운로드 (v2.0.0)](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.0.0/LimbusBeep-v2.0.0.apk)**
-* 📥 **[항상 최신 APK 링크](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.0.0/LimbusBeep-v2.0-latest.apk)**
+* **[최신 APK 다운로드 (v2.0.0)](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.0.0/LimbusBeep-v2.0.0.apk)**
+* **[항상 최신 APK 링크](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.0.0/LimbusBeep-v2.0-latest.apk)**
 
 ---
 
-## ✨ 주요 기능
+## 주요 기능
 
 1. **인게임 원본 삐삐 비주얼 & 사운드**:
    - 오리지널 단테 일렉트릭 블루(`#2fbffc`) 폰트 및 딥 블랙(`#000000`) 배경 기본 탑재
@@ -37,18 +37,20 @@
 
 ---
 
-## 🎮 조작법
+## 조작법
 
-- **화면 터치 / SPACE / ENTER**: 다음 메시지 복호화 진행 (`대기` ➔ `비프` ➔ `복호화` ➔ `완료` ➔ `_CLEAR._` ➔ `_ALL_CLEAR._`)
+- **화면 터치 / SPACE / ENTER**: 다음 메시지 복호화 진행 (`대기` -> `비프` -> `복호화` -> `완료` -> `_CLEAR._` -> `_ALL_CLEAR._`)
 - **R**: 현재 메시지 다시 재생
 - **S / 우측 상단 [SETTING]**: 환경 설정 창 열기
 
 ---
 
-## 🛠️ Android APK 빌드 방법
+## Android APK 빌드 방법
 
 ```bash
 # 원클릭 안드로이드 APK 빌드
+./build.sh
+# 또는
 ./build_android.sh
 ```
 빌드된 APK는 `dist/LimbusBeep-v2.0-latest.apk`에 생성됩니다.
