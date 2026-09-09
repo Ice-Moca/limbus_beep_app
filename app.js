@@ -494,15 +494,26 @@ class PagerApp {
       });
     });
 
-    // Android Native AlarmManager 동기화
-    if (window.AndroidBridge && typeof window.AndroidBridge.syncAlarms === 'function') {
-      window.AndroidBridge.syncAlarms(JSON.stringify(alarmsList));
+    // Android Native 알림 권한 및 AlarmManager 동기화
+    if (window.AndroidBridge) {
+      try {
+        if (typeof window.AndroidBridge.requestNotificationPermission === 'function') {
+          window.AndroidBridge.requestNotificationPermission();
+        }
+        if (typeof window.AndroidBridge.syncAlarms === 'function') {
+          window.AndroidBridge.syncAlarms(JSON.stringify(alarmsList));
+        }
+      } catch (e) {
+        console.warn("AndroidBridge alarm sync error:", e);
+      }
     }
 
     // 웹 브라우저 Notification 권한 사전 요청
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
+    try {
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch (e) {}
   }
 
   startAlarmWatcher() {

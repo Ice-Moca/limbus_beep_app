@@ -56,7 +56,7 @@ else
   exit 1
 fi
 
-$GRADLE_CMD assembleDebug
+$GRADLE_CMD clean assembleDebug
 
 # 5. dist 디렉토리로 APK 복사
 cd "$SCRIPT_DIR"
