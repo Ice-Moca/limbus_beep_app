@@ -10,7 +10,7 @@
 
 스마트폰에 설치하여 바로 사용하실 수 있는 **5.7MB 초경량 네이티브 앱**입니다.
 
-* **[최신 APK 다운로드 (v2.1.0)](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.1.0/LimbusBeep-v2.1.0.apk)**
+* **[최신 APK 다운로드 (v2.1.1)](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.1.1/LimbusBeep-v2.1.1.apk)**
 * **[항상 최신 APK 링크](https://github.com/Ice-Moca/limbus_beep_app/releases/latest/download/LimbusBeep-latest.apk)**
 
 ---
@@ -58,4 +58,4 @@
 # 또는
 ./build_android.sh
 ```
-빌드된 APK는 `dist/LimbusBeep-v2.0-latest.apk`에 생성됩니다.
+빌드된 APK는 `dist/LimbusBeep-latest.apk` (또는 `dist/LimbusBeep-v2.1.1.apk`)에 생성됩니다.

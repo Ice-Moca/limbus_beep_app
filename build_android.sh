@@ -64,10 +64,10 @@ mkdir -p "$SCRIPT_DIR/dist"
 APK_SOURCE="$SCRIPT_DIR/android/app/build/outputs/apk/debug/app-debug.apk"
 
 if [ -f "$APK_SOURCE" ]; then
+  cp "$APK_SOURCE" "$SCRIPT_DIR/dist/LimbusBeep-v2.1.1.apk"
   cp "$APK_SOURCE" "$SCRIPT_DIR/dist/LimbusBeep-v2.1.0.apk"
   cp "$APK_SOURCE" "$SCRIPT_DIR/dist/LimbusBeep-latest.apk"
-  cp "$APK_SOURCE" "$SCRIPT_DIR/dist/LimbusBeep-v2.0-latest.apk"
-  echo "[SUCCESS] Android APK 빌드 완료: dist/LimbusBeep-v2.1.0.apk"
+  echo "[SUCCESS] Android APK 빌드 완료: dist/LimbusBeep-v2.1.1.apk"
 else
   echo "[ERROR] 빌드 결과물 APK를 찾을 수 없습니다: $APK_SOURCE"
   exit 1

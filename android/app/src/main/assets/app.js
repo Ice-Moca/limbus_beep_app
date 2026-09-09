@@ -65,7 +65,8 @@ class PagerApp {
     this.animInterval = null;
     this.beepTimeout = null;
     this.audioCtx = null;
-    this.firedAlarms = new Set();
+    this.todayKey = this.getTodayKey();
+    this.firedAlarms = this.loadFiredAlarms(this.todayKey);
     this.pendingAlarmTarget = null;
     
     this.initDOM();
@@ -246,9 +247,16 @@ class PagerApp {
       this.showToast(`단계 ${newStageNum} 추가됨`);
     });
 
-    // 6. 볼륨 슬라이더
+    // 6. 볼륨 슬라이더 및 사운드 설정
     this.dom.sliderVolume.addEventListener('input', (e) => {
       this.dom.labelVolume.textContent = `${e.target.value}%`;
+    });
+    this.dom.sliderVolume.addEventListener('change', (e) => {
+      this.saveConfig({ volume: parseInt(e.target.value, 10) });
+    });
+
+    this.dom.selectSoundType.addEventListener('change', (e) => {
+      this.saveConfig({ sound_type: e.target.value });
     });
 
     this.dom.btnTestSound.addEventListener('click', () => {
@@ -261,7 +269,7 @@ class PagerApp {
       }
     });
 
-    // 7. 실시간 글자/배경 색상 프리셋 원형 칩 클릭
+    // 7. 실시간 글자/배경 색상 프리셋 원형 칩 클릭 (클릭 즉시 자동 저장)
     document.querySelectorAll('.color-circle-chip[data-color]').forEach(chip => {
       chip.addEventListener('click', (e) => {
         const type = e.currentTarget.dataset.type;
@@ -269,10 +277,13 @@ class PagerApp {
         if (type === 'font') {
           this.config.font_color = color;
           this.applyCustomColors(color, this.config.bg_color || '#000000');
+          this.saveConfig({ font_color: color });
         } else if (type === 'bg') {
           this.config.bg_color = color;
           this.applyCustomColors(this.config.font_color || '#2FBFFC', color);
+          this.saveConfig({ bg_color: color });
         }
+        this.showToast(`색상이 저장되었습니다: ${color}`);
       });
     });
 
@@ -288,18 +299,42 @@ class PagerApp {
       });
     }
 
-    // 9. 화면 방향 변경
+    // 9. 화면 방향 변경 (즉시 자동 저장)
     this.dom.selectOrientation.addEventListener('change', (e) => {
       this.applyOrientation(e.target.value);
+      this.saveConfig({ orientation: e.target.value });
+      this.showToast("화면 방향 설정이 저장되었습니다.");
     });
 
-    // 10. CRT 스캔라인 & 비네팅 토글 시 실시간 미니 프리뷰 업데이트
+    // 10. CRT 스캔라인 & 비네팅 토글 시 실시간 미니 프리뷰 업데이트 및 자동 저장
     if (this.dom.toggleScanlines) {
-      this.dom.toggleScanlines.addEventListener('change', () => this.updateMiniCrtPreview());
+      this.dom.toggleScanlines.addEventListener('change', (e) => {
+        this.updateMiniCrtPreview();
+        this.saveConfig({ scanlines: e.target.checked });
+      });
     }
     if (this.dom.toggleVignette) {
-      this.dom.toggleVignette.addEventListener('change', () => this.updateMiniCrtPreview());
+      this.dom.toggleVignette.addEventListener('change', (e) => {
+        this.updateMiniCrtPreview();
+        this.saveConfig({ vignette: e.target.checked });
+      });
     }
+
+    // 일정 알람 토글 자동 저장
+    if (this.dom.toggleAlarm) {
+      this.dom.toggleAlarm.addEventListener('change', (e) => {
+        this.saveConfig({ alarm_enabled: e.target.checked });
+        this.showToast(e.target.checked ? "일정 알람이 활성화되었습니다." : "일정 알람이 비활성화되었습니다.");
+      });
+    }
+
+    // 자동 동기화 주기 및 디코드 속도 자동 저장
+    this.dom.selectAutoSync.addEventListener('change', (e) => {
+      this.saveConfig({ auto_sync_min: parseInt(e.target.value, 10) });
+    });
+    this.dom.selectDecodeSpeed.addEventListener('change', (e) => {
+      this.saveConfig({ decode_speed: e.target.value });
+    });
 
     // 11. 설정 저장 및 기본값 복원
     this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
@@ -460,6 +495,26 @@ class PagerApp {
   }
 
   // ── 일정 알람 스케줄링 & 감시 엔진 ──
+  getTodayKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  }
+
+  loadFiredAlarms(todayKey) {
+    try {
+      const stored = localStorage.getItem(`limbus_fired_alarms_${todayKey}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  saveFiredAlarms(todayKey) {
+    try {
+      localStorage.setItem(`limbus_fired_alarms_${todayKey}`, JSON.stringify(Array.from(this.firedAlarms)));
+    } catch {}
+  }
+
   scheduleAlarms() {
     const isEnabled = this.config.alarm_enabled !== false;
     if (!isEnabled) {
@@ -484,7 +539,7 @@ class PagerApp {
 
         if (triggerDate.getTime() > now.getTime()) {
           alarmsList.push({
-            id: (sIdx + 1) * 100 + (mIdx + 1),
+            id: alarmsList.length + 1,
             title: "단테 삐삐 일정 알람",
             message: msg.text,
             time: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
@@ -529,7 +584,13 @@ class PagerApp {
     const curH = now.getHours();
     const curM = now.getMinutes();
     const curTimeStr = `${String(curH).padStart(2, '0')}:${String(curM).padStart(2, '0')}`;
-    const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+    const todayKey = this.getTodayKey();
+
+    // 날짜가 바뀌었을 경우 firedAlarms 새로고침
+    if (this.todayKey !== todayKey) {
+      this.todayKey = todayKey;
+      this.firedAlarms = this.loadFiredAlarms(todayKey);
+    }
 
     this.messages.forEach((stage, sIdx) => {
       if (!stage.messages) return;
@@ -542,9 +603,10 @@ class PagerApp {
         const msgTimeStr = `${String(msgH).padStart(2, '0')}:${String(msgM).padStart(2, '0')}`;
 
         if (msgTimeStr === curTimeStr) {
-          const alarmKey = `${todayKey}_${sIdx}_${mIdx}_${msgTimeStr}`;
+          const alarmKey = `${todayKey}_${msgTimeStr}_${msg.text}`;
           if (!this.firedAlarms.has(alarmKey)) {
             this.firedAlarms.add(alarmKey);
+            this.saveFiredAlarms(todayKey);
             this.triggerInAppAlarm(msg, sIdx, mIdx, msgTimeStr);
           }
         }
@@ -553,7 +615,7 @@ class PagerApp {
   }
 
   triggerInAppAlarm(msg, sIdx, mIdx, timeStr) {
-    // 1. 단테 비프음 3회 연속 재생 (알람 시퀀스)
+    // 1. 단테 비프음 3회 연속 재생 (인앱 알람 시퀀스)
     this.playBeep();
     setTimeout(() => this.playBeep(), 250);
     setTimeout(() => this.playBeep(), 500);
@@ -574,8 +636,8 @@ class PagerApp {
       this.pendingAlarmTarget = { stageIdx: sIdx, msgIdx: mIdx };
     }
 
-    // 4. 웹 브라우저 백그라운드 Notification
-    if ('Notification' in window && Notification.permission === 'granted') {
+    // 4. 웹 브라우저 환경에서만 Notification (안드로이드 네이티브 앱은 AlarmManager가 담당하여 중복 방지)
+    if (!window.AndroidBridge && 'Notification' in window && Notification.permission === 'granted') {
       try {
         new Notification(`단테 삐삐 알람 [${timeStr}]`, {
           body: msg.text,
@@ -583,11 +645,6 @@ class PagerApp {
           tag: `limbus-alarm-${timeStr}`
         });
       } catch (e) {}
-    }
-
-    // 5. 안드로이드 네이티브 푸시 알림
-    if (window.AndroidBridge && typeof window.AndroidBridge.triggerNotification === 'function') {
-      window.AndroidBridge.triggerNotification("단테 삐삐 일정 알람", msg.text, timeStr);
     }
   }
 
@@ -1544,12 +1601,14 @@ class PagerApp {
     if (this.colorPickerTarget === 'font') {
       this.config.font_color = chosen;
       this.applyCustomColors(chosen, this.config.bg_color || '#000000');
+      this.saveConfig({ font_color: chosen });
     } else {
       this.config.bg_color = chosen;
       this.applyCustomColors(this.config.font_color || '#2FBFFC', chosen);
+      this.saveConfig({ bg_color: chosen });
     }
     this.closeCustomColorModal();
-    this.showToast(`색상이 적용되었습니다: ${chosen}`);
+    this.showToast(`색상이 적용 및 저장되었습니다: ${chosen}`);
   }
 
   // ── 색상 변환 헬퍼 함수 ──

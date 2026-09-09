@@ -145,7 +145,7 @@ class MainActivity : AppCompatActivity() {
         fun cancelAllAlarms() {
             try {
                 val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-                for (id in 0..200) {
+                for (id in 0..500) {
                     val intent = Intent(this@MainActivity, AlarmReceiver::class.java)
                     val pendingIntent = PendingIntent.getBroadcast(
                         this@MainActivity,

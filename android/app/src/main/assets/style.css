@@ -564,10 +564,11 @@ html, body {
   box-shadow: 0 0 40px rgba(0, 229, 255, 0.16), 0 25px 65px rgba(0, 0, 0, 0.95);
   border-radius: 10px;
   width: min(680px, 95vw);
-  max-height: 90vh;
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
   animation: modal-zoom 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -583,6 +584,7 @@ html, body {
   padding: 16px 22px;
   border-bottom: 1px solid #142433;
   background: #05080e;
+  flex-shrink: 0;
 }
 
 .modal-title-group {
@@ -659,6 +661,7 @@ html, body {
   border-bottom: 1px solid #142433;
   padding: 6px;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .tab-btn {
@@ -688,9 +691,11 @@ html, body {
 }
 
 .modal-body {
-  padding: 20px 22px;
+  padding: 18px 22px;
   overflow-y: auto;
-  flex: 1;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -1209,6 +1214,7 @@ input:checked + .slider-switch:before {
   padding: 14px 22px;
   border-top: 1px solid #142433;
   background: #05080e;
+  flex-shrink: 0;
 }
 
 .footer-right-btns {
@@ -1244,13 +1250,24 @@ input:checked + .slider-switch:before {
   background: #04080e;
   border: 1px solid var(--cyan-primary);
   border-radius: 8px;
-  width: min(440px, 92vw);
-  max-height: 90vh;
+  width: min(460px, 94vw);
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 0 35px rgba(47, 191, 252, 0.35), inset 0 0 25px rgba(0, 0, 0, 0.85);
   overflow: hidden;
+  min-height: 0;
   animation: modal-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cyber-color-dialog .modal-header {
+  flex-shrink: 0;
+}
+
+.cyber-color-dialog .modal-footer {
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .cyber-color-body {
@@ -1259,6 +1276,10 @@ input:checked + .slider-switch:before {
   flex-direction: column;
   gap: 12px;
   background: #03060a;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .picker-interactive-box {
@@ -1559,6 +1580,172 @@ input:checked + .slider-switch:before {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+/* ── 가로 모드 및 소형 높이 화면 반응형 최적화 (Landscape & Compact Height) ── */
+@media (max-height: 540px), (orientation: landscape) and (max-height: 600px) {
+  .modal-overlay {
+    padding: 6px 10px;
+  }
+
+  .modal-card {
+    max-height: 98vh;
+    width: min(720px, 98vw);
+    border-radius: 6px;
+  }
+
+  .modal-header {
+    padding: 8px 16px;
+  }
+
+  .modal-title {
+    font-size: 14px;
+  }
+
+  .modal-subtitle {
+    display: none;
+  }
+
+  .modal-tabs {
+    padding: 3px 6px;
+    gap: 4px;
+  }
+
+  .tab-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .modal-body {
+    padding: 10px 14px;
+  }
+
+  .tab-pane.active {
+    gap: 10px;
+  }
+
+  .section-card {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .option-row {
+    padding: 6px 10px;
+  }
+
+  .theme-mini-preview {
+    height: 52px;
+    padding: 4px 10px;
+    margin-bottom: 6px;
+  }
+
+  .mini-preview-text {
+    font-size: 14px;
+  }
+
+  .mini-preview-time {
+    font-size: 11px;
+  }
+
+  .color-setting-block {
+    margin-top: 6px !important;
+  }
+
+  .color-block-header {
+    margin-bottom: 4px;
+  }
+
+  .color-chips-row {
+    gap: 6px;
+  }
+
+  .color-circle-chip {
+    width: 28px;
+    height: 28px;
+  }
+
+  .modal-footer {
+    padding: 8px 16px;
+  }
+
+  .modal-footer .btn {
+    padding: 6px 14px;
+    font-size: 11px;
+  }
+
+  /* 커스텀 색상 선택 모달 가로 모드 2컬럼 최적화 */
+  .cyber-color-dialog {
+    width: min(620px, 98vw);
+    max-height: 98vh;
+  }
+
+  .cyber-color-dialog .modal-header {
+    padding: 8px 14px;
+  }
+
+  .cyber-color-dialog .modal-footer {
+    padding: 8px 14px;
+  }
+
+  .cyber-color-body {
+    padding: 8px 14px;
+    display: grid;
+    grid-template-columns: 1fr 1.05fr;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .picker-interactive-box {
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .picker-sv-box {
+    height: 115px;
+  }
+
+  .picker-hue-track {
+    height: 14px;
+  }
+
+  .picker-values-row {
+    grid-column: 2;
+    padding: 6px 10px;
+    gap: 8px;
+  }
+
+  .picker-live-swatch {
+    width: 42px;
+    height: 42px;
+  }
+
+  .cyber-hex-field {
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+
+  .rgb-num-field {
+    padding: 2px 3px;
+    font-size: 10px;
+  }
+
+  .quick-preset-container {
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .quick-preset-grid {
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+  }
+
+  .quick-preset-chip {
+    border-radius: 3px;
+  }
 }
 
 
