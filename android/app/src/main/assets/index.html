@@ -27,6 +27,19 @@
       <div class="corner corner-tr"></div>
       <div class="corner corner-bl"></div>
       <div class="corner corner-br"></div>
+    <!-- 상단 슬라이드 인앱 알람 배너 -->
+    <div id="alarm-banner" class="alarm-banner hidden">
+      <div class="alarm-banner-content">
+        <span class="alarm-badge">ALARM</span>
+        <div class="alarm-text-group">
+          <span id="alarm-time-text" class="alarm-time">09:00</span>
+          <span id="alarm-desc-text" class="alarm-desc">등록된 일정 알람</span>
+        </div>
+      </div>
+      <div class="alarm-banner-actions">
+        <button id="btn-alarm-jump" class="btn btn-sm btn-primary">확인</button>
+        <button id="btn-alarm-dismiss" class="btn btn-sm btn-secondary">닫기</button>
+      </div>
     </div>
 
     <!-- 초미니멀 상단 바 (설정 버튼만 우측 상단에 심플하게 배치) -->
@@ -90,7 +103,7 @@
           <span>메시지 관리</span>
         </button>
         <button class="tab-btn" data-tab="tab-sound">
-          <span>화면 및 사운드</span>
+          <span>화면 / 사운드 / 알람</span>
         </button>
       </div>
 
@@ -280,6 +293,26 @@
                 <option value="file" selected>비프 사운드</option>
                 <option value="synth">신디사이저 톤</option>
               </select>
+            </div>
+          </div>
+
+          <!-- 일정 알람 설정 -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <span class="card-tag">일정 알람 설정</span>
+            </div>
+
+            <div class="option-row">
+              <div class="option-info">
+                <div class="option-title">등록 시간 알람 알림</div>
+                <div class="option-desc" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                  일정에 등록된 시간(예: 09:00)이 되면 비프음과 함께 알람을 울립니다.
+                </div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="toggle-alarm" checked>
+                <span class="slider-switch"></span>
+              </label>
             </div>
           </div>
 

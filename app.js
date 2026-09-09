@@ -26,6 +26,7 @@ const DEFAULT_CONFIG = {
   bg_color: '#000000',      // 딥 블랙 기본
   scanlines: true,
   vignette: true,
+  alarm_enabled: true, // 등록된 시간에 알람 울리기 (기본 활성화)
 };
 
 const DEFAULT_MESSAGES = [
@@ -64,6 +65,8 @@ class PagerApp {
     this.animInterval = null;
     this.beepTimeout = null;
     this.audioCtx = null;
+    this.firedAlarms = new Set();
+    this.pendingAlarmTarget = null;
     
     this.initDOM();
     this.initCustomColorPicker();
@@ -71,6 +74,8 @@ class PagerApp {
     this.applySettings();
     this.startClock();
     this.updateDisplay();
+    this.startAlarmWatcher();
+    this.scheduleAlarms();
 
     // 초기 자동 동기화
     if (this.config.ics_url && this.config.auto_sync_min > 0) {
@@ -95,6 +100,13 @@ class PagerApp {
       progressFill: document.getElementById('progress-fill'),
       clock: document.getElementById('clock-display'),
       hintText: document.getElementById('hint-text'),
+
+      // 인앱 알람 배너
+      alarmBanner: document.getElementById('alarm-banner'),
+      alarmTimeText: document.getElementById('alarm-time-text'),
+      alarmDescText: document.getElementById('alarm-desc-text'),
+      btnAlarmJump: document.getElementById('btn-alarm-jump'),
+      btnAlarmDismiss: document.getElementById('btn-alarm-dismiss'),
       
       // 모달 & 폼 컨트롤
       modal: document.getElementById('settings-modal'),
@@ -124,6 +136,7 @@ class PagerApp {
       labelVolume: document.getElementById('label-volume'),
       toggleScanlines: document.getElementById('toggle-scanlines'),
       toggleVignette: document.getElementById('toggle-vignette'),
+      toggleAlarm: document.getElementById('toggle-alarm'),
 
       // 커스텀 사이버 컬러 모달
       colorModal: document.getElementById('custom-color-modal'),
@@ -157,11 +170,30 @@ class PagerApp {
   bindEvents() {
     // 1. 화면 클릭 / 터치로 다음 단계 진행
     this.dom.app.addEventListener('click', (e) => {
-      if (e.target.closest('#btn-open-settings') || !this.dom.modal.classList.contains('hidden')) {
+      if (e.target.closest('#btn-open-settings') || e.target.closest('#alarm-banner') || !this.dom.modal.classList.contains('hidden')) {
         return;
       }
       this.advance();
     });
+
+    // 1-1. 인앱 알람 배너 액션 버튼
+    if (this.dom.btnAlarmJump) {
+      this.dom.btnAlarmJump.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.pendingAlarmTarget) {
+          this.jumpToMessage(this.pendingAlarmTarget.stageIdx, this.pendingAlarmTarget.msgIdx);
+        } else {
+          this.dismissAlarmBanner();
+        }
+      });
+    }
+
+    if (this.dom.btnAlarmDismiss) {
+      this.dom.btnAlarmDismiss.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.dismissAlarmBanner();
+      });
+    }
 
     // 2. 키보드 단축키
     window.addEventListener('keydown', (e) => {
@@ -329,6 +361,7 @@ class PagerApp {
     this.currentMsgIdx = 0;
     this.updateDisplay();
     this.renderCustomStageCards();
+    this.scheduleAlarms();
   }
 
   applyCustomColors(fontColor, bgColor) {
@@ -423,6 +456,148 @@ class PagerApp {
     }
     this.applyCustomColors(this.config.font_color, this.config.bg_color);
     this.applyOrientation(this.config.orientation || 'landscape');
+    this.scheduleAlarms();
+  }
+
+  // ── 일정 알람 스케줄링 & 감시 엔진 ──
+  scheduleAlarms() {
+    const isEnabled = this.config.alarm_enabled !== false;
+    if (!isEnabled) {
+      if (window.AndroidBridge && typeof window.AndroidBridge.cancelAllAlarms === 'function') {
+        window.AndroidBridge.cancelAllAlarms();
+      }
+      return;
+    }
+
+    const now = new Date();
+    const alarmsList = [];
+
+    this.messages.forEach((stage, sIdx) => {
+      if (!stage.messages) return;
+      stage.messages.forEach((msg, mIdx) => {
+        const match = (msg.time_info || '').match(/\b(\d{1,2}):(\d{2})\b/);
+        if (!match) return;
+
+        const hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const triggerDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+
+        if (triggerDate.getTime() > now.getTime()) {
+          alarmsList.push({
+            id: (sIdx + 1) * 100 + (mIdx + 1),
+            title: "단테 삐삐 일정 알람",
+            message: msg.text,
+            time: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+            triggerAtMillis: triggerDate.getTime()
+          });
+        }
+      });
+    });
+
+    // Android Native AlarmManager 동기화
+    if (window.AndroidBridge && typeof window.AndroidBridge.syncAlarms === 'function') {
+      window.AndroidBridge.syncAlarms(JSON.stringify(alarmsList));
+    }
+
+    // 웹 브라우저 Notification 권한 사전 요청
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }
+
+  startAlarmWatcher() {
+    setInterval(() => {
+      this.checkAlarms();
+    }, 1000);
+  }
+
+  checkAlarms() {
+    if (this.config.alarm_enabled === false) return;
+
+    const now = new Date();
+    const curH = now.getHours();
+    const curM = now.getMinutes();
+    const curTimeStr = `${String(curH).padStart(2, '0')}:${String(curM).padStart(2, '0')}`;
+    const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+
+    this.messages.forEach((stage, sIdx) => {
+      if (!stage.messages) return;
+      stage.messages.forEach((msg, mIdx) => {
+        const match = (msg.time_info || '').match(/\b(\d{1,2}):(\d{2})\b/);
+        if (!match) return;
+
+        const msgH = parseInt(match[1], 10);
+        const msgM = parseInt(match[2], 10);
+        const msgTimeStr = `${String(msgH).padStart(2, '0')}:${String(msgM).padStart(2, '0')}`;
+
+        if (msgTimeStr === curTimeStr) {
+          const alarmKey = `${todayKey}_${sIdx}_${mIdx}_${msgTimeStr}`;
+          if (!this.firedAlarms.has(alarmKey)) {
+            this.firedAlarms.add(alarmKey);
+            this.triggerInAppAlarm(msg, sIdx, mIdx, msgTimeStr);
+          }
+        }
+      });
+    });
+  }
+
+  triggerInAppAlarm(msg, sIdx, mIdx, timeStr) {
+    // 1. 단테 비프음 3회 연속 재생 (알람 시퀀스)
+    this.playBeep();
+    setTimeout(() => this.playBeep(), 250);
+    setTimeout(() => this.playBeep(), 500);
+
+    // 2. 디바이스 진동
+    if (navigator.vibrate) {
+      navigator.vibrate([350, 150, 350, 150, 600]);
+    }
+    if (window.AndroidBridge && typeof window.AndroidBridge.vibrate === 'function') {
+      window.AndroidBridge.vibrate(800);
+    }
+
+    // 3. 상단 인앱 알람 배너 노출
+    if (this.dom.alarmBanner) {
+      if (this.dom.alarmTimeText) this.dom.alarmTimeText.textContent = timeStr;
+      if (this.dom.alarmDescText) this.dom.alarmDescText.textContent = msg.text;
+      this.dom.alarmBanner.classList.remove('hidden');
+      this.pendingAlarmTarget = { stageIdx: sIdx, msgIdx: mIdx };
+    }
+
+    // 4. 웹 브라우저 백그라운드 Notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(`단테 삐삐 알람 [${timeStr}]`, {
+          body: msg.text,
+          icon: 'assets/icon-192.png',
+          tag: `limbus-alarm-${timeStr}`
+        });
+      } catch (e) {}
+    }
+
+    // 5. 안드로이드 네이티브 푸시 알림
+    if (window.AndroidBridge && typeof window.AndroidBridge.triggerNotification === 'function') {
+      window.AndroidBridge.triggerNotification("단테 삐삐 일정 알람", msg.text, timeStr);
+    }
+  }
+
+  dismissAlarmBanner() {
+    if (this.dom.alarmBanner) {
+      this.dom.alarmBanner.classList.add('hidden');
+    }
+    this.pendingAlarmTarget = null;
+  }
+
+  jumpToMessage(stageIdx, msgIdx) {
+    this.dismissAlarmBanner();
+    if (stageIdx >= 0 && stageIdx < this.messages.length) {
+      this.currentStageIdx = stageIdx;
+      if (msgIdx >= 0 && msgIdx < this.messages[stageIdx].messages.length) {
+        this.currentMsgIdx = msgIdx;
+      } else {
+        this.currentMsgIdx = 0;
+      }
+      this.startBeeping();
+    }
   }
 
   // ── 오디오 재생 ──
@@ -702,6 +877,9 @@ class PagerApp {
     this.dom.selectSoundType.value = this.config.sound_type || 'file';
     this.dom.toggleScanlines.checked = this.config.scanlines;
     this.dom.toggleVignette.checked = this.config.vignette !== false;
+    if (this.dom.toggleAlarm) {
+      this.dom.toggleAlarm.checked = this.config.alarm_enabled !== false;
+    }
     this.applyCustomColors(this.config.font_color, this.config.bg_color);
 
     // 사용자가 추가/편집한 STAGE 목록 복원 및 렌더링
@@ -851,6 +1029,7 @@ class PagerApp {
       bg_color: this.config.bg_color || '#000000',
       scanlines: this.dom.toggleScanlines.checked,
       vignette: this.dom.toggleVignette.checked,
+      alarm_enabled: this.dom.toggleAlarm ? this.dom.toggleAlarm.checked : true,
     };
     this.saveConfig(newConfig);
     this.showToast("환경 설정이 저장되었습니다.");

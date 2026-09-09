@@ -1,18 +1,33 @@
 package com.icemoca.limbusbeep
 
 import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.Dialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Message
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.View
 import android.view.WindowManager
 import android.webkit.*
 import androidx.appcompat.app.AppCompatActivity
+import org.json.JSONArray
 
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        const val ALARM_CHANNEL_ID = "limbus_beep_alarms"
+        private const val PERMISSION_REQUEST_CODE = 101
+    }
 
     private lateinit var webView: WebView
     private var popupDialog: Dialog? = null
@@ -63,11 +78,130 @@ class MainActivity : AppCompatActivity() {
                 "ERROR: ${e.message}"
             }
         }
+
+        @JavascriptInterface
+        fun syncAlarms(jsonStr: String) {
+            try {
+                cancelAllAlarms()
+                val jsonArray = JSONArray(jsonStr)
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+                
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val id = obj.optInt("id", i + 1)
+                    val title = obj.optString("title", "단테 삐삐 일정 알람")
+                    val message = obj.optString("message", "")
+                    val time = obj.optString("time", "")
+                    val triggerAtMillis = obj.optLong("triggerAtMillis", 0L)
+
+                    if (triggerAtMillis > System.currentTimeMillis()) {
+                        val intent = Intent(this@MainActivity, AlarmReceiver::class.java).apply {
+                            putExtra("EXTRA_ID", id)
+                            putExtra("EXTRA_TITLE", title)
+                            putExtra("EXTRA_MESSAGE", message)
+                            putExtra("EXTRA_TIME", time)
+                        }
+                        val pendingIntent = PendingIntent.getBroadcast(
+                            this@MainActivity,
+                            id,
+                            intent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                        } else {
+                            alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        @JavascriptInterface
+        fun cancelAllAlarms() {
+            try {
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+                for (id in 0..200) {
+                    val intent = Intent(this@MainActivity, AlarmReceiver::class.java)
+                    val pendingIntent = PendingIntent.getBroadcast(
+                        this@MainActivity,
+                        id,
+                        intent,
+                        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    if (pendingIntent != null) {
+                        alarmManager.cancel(pendingIntent)
+                        pendingIntent.cancel()
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        @JavascriptInterface
+        fun vibrate(durationMs: Long) {
+            try {
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createOneShot(if (durationMs > 0) durationMs else 400L, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator.vibrate(if (durationMs > 0) durationMs else 400L)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        @JavascriptInterface
+        fun triggerNotification(title: String, message: String, timeInfo: String) {
+            try {
+                val intent = Intent(this@MainActivity, AlarmReceiver::class.java).apply {
+                    putExtra("EXTRA_TITLE", title)
+                    putExtra("EXTRA_MESSAGE", message)
+                    putExtra("EXTRA_TIME", timeInfo)
+                    putExtra("EXTRA_ID", (System.currentTimeMillis() % 100000).toInt())
+                }
+                sendBroadcast(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                ALARM_CHANNEL_ID,
+                "Limbus Beep 일정 알람",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "등록된 시간에 도착하는 단테 삐삐 일정 알림"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 350, 200, 350, 200, 600)
+            }
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager?.createNotificationChannel(channel)
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        createNotificationChannel()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), PERMISSION_REQUEST_CODE)
+            }
+        }
 
         // Fullscreen immersive sticky mode
         window.setFlags(
