@@ -648,6 +648,15 @@ class PagerApp {
   }
 
   // ── 데이터 헬퍼 ──
+  truncateText(text, maxLen = 30) {
+    if (!text) return "";
+    const str = String(text).trim();
+    if (str.length > maxLen) {
+      return str.substring(0, maxLen).trim() + "...";
+    }
+    return str;
+  }
+
   getCurrentStage() {
     return this.messages[this.currentStageIdx] || null;
   }
@@ -655,7 +664,12 @@ class PagerApp {
   getCurrentMessage() {
     const stage = this.getCurrentStage();
     if (!stage || !stage.messages) return null;
-    return stage.messages[this.currentMsgIdx] || null;
+    const msg = stage.messages[this.currentMsgIdx] || null;
+    if (!msg) return null;
+    return {
+      ...msg,
+      text: this.truncateText(msg.text, 30)
+    };
   }
 
   getRandomCipher(len = 10) {
@@ -987,7 +1001,8 @@ class PagerApp {
           const timeInput = item.querySelector('.msg-time-input');
           const textInput = item.querySelector('.msg-text-input');
           const time_info = timeInput ? timeInput.value.trim() : "";
-          const text = textInput ? textInput.value.trim() : "";
+          const rawText = textInput ? textInput.value.trim() : "";
+          const text = this.truncateText(rawText, 30);
           if (text || time_info) {
             parsedMessages.push({ text: text || "(빈 메시지)", time_info });
           }
@@ -1233,7 +1248,8 @@ class PagerApp {
   }
 
   formatEvent(ev) {
-    const summary = (ev.SUMMARY || "(제목 없음)").replace(/\\([,;Nn\\])/g, (m, c) => (c === 'n' || c === 'N') ? ' ' : c);
+    const rawSummary = (ev.SUMMARY || "(제목 없음)").replace(/\\([,;Nn\\])/g, (m, c) => (c === 'n' || c === 'N') ? ' ' : c);
+    const summary = this.truncateText(rawSummary, 30);
     const dtstart = ev.DTSTART || "";
     const dtend = ev.DTEND || "";
     let timeInfo = "오늘 종일";
