@@ -20,7 +20,7 @@ const DEFAULT_CONFIG = {
   ai_stage_count: 3,        // AI 모드 진행 단계 수 (1~5)
   gemini_api_key: '',
   gemini_hint: '',
-  gemini_model: 'gemini-2.0-flash',
+  gemini_model: 'gemini-2.0-flash-lite',
   volume: 80,
   orientation: 'landscape', // landscape | portrait | sensor (가로 모드 기본)
   ics_url: '',
@@ -321,11 +321,16 @@ class PagerApp {
       });
     }
 
-    // 4-4. Gemini 모델 변경
+    // 4-4. Gemini 모델 변경 (Lite 모델 강제 제한)
     if (this.dom.selectGeminiModel) {
       this.dom.selectGeminiModel.addEventListener('change', (e) => {
-        this.config.gemini_model = e.target.value;
-        this.saveConfig({ gemini_model: e.target.value });
+        let val = e.target.value;
+        if (!val.toLowerCase().includes('lite')) {
+          val = 'gemini-2.0-flash-lite';
+          e.target.value = val;
+        }
+        this.config.gemini_model = val;
+        this.saveConfig({ gemini_model: val });
       });
     }
 
@@ -540,8 +545,8 @@ class PagerApp {
       if (!parsed.ai_stage_count) {
         config.ai_stage_count = 3;
       }
-      if (!config.gemini_model || config.gemini_model.includes('2.5')) {
-        config.gemini_model = 'gemini-2.0-flash';
+      if (!config.gemini_model || !config.gemini_model.toLowerCase().includes('lite')) {
+        config.gemini_model = 'gemini-2.0-flash-lite';
       }
       return config;
     } catch {
@@ -1401,7 +1406,10 @@ class PagerApp {
       this.dom.inputGeminiHint.value = this.config.gemini_hint || '';
     }
     if (this.dom.selectGeminiModel) {
-      this.dom.selectGeminiModel.value = this.config.gemini_model || 'gemini-2.0-flash';
+      const modelVal = (this.config.gemini_model && this.config.gemini_model.toLowerCase().includes('lite'))
+        ? this.config.gemini_model
+        : 'gemini-2.0-flash-lite';
+      this.dom.selectGeminiModel.value = modelVal;
     }
     if (this.dom.aiTestResult) {
       this.dom.aiTestResult.textContent = '';
@@ -1612,7 +1620,9 @@ class PagerApp {
       ai_stage_count: this.config.ai_stage_count || 3,
       gemini_api_key: this.dom.inputGeminiKey ? this.dom.inputGeminiKey.value.trim() : (this.config.gemini_api_key || ''),
       gemini_hint: this.dom.inputGeminiHint ? this.dom.inputGeminiHint.value.trim() : (this.config.gemini_hint || ''),
-      gemini_model: this.dom.selectGeminiModel ? this.dom.selectGeminiModel.value : (this.config.gemini_model || 'gemini-2.0-flash'),
+      gemini_model: (this.dom.selectGeminiModel && this.dom.selectGeminiModel.value.toLowerCase().includes('lite'))
+        ? this.dom.selectGeminiModel.value
+        : 'gemini-2.0-flash-lite',
       orientation: this.dom.selectOrientation.value,
       ics_url: icsUrlVal,
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
@@ -1735,7 +1745,7 @@ class PagerApp {
       const validModels = data.models
         .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
         .map(m => m.name.replace(/^models\//, ''))
-        .filter(name => name.startsWith('gemini'));
+        .filter(name => name.startsWith('gemini') && name.toLowerCase().includes('lite'));
 
       if (validModels.length > 0) {
         this.updateModelSelectOptions(validModels);
@@ -1747,31 +1757,26 @@ class PagerApp {
 
   updateModelSelectOptions(models) {
     if (!this.dom.selectGeminiModel) return;
-    const currentVal = this.config.gemini_model || 'gemini-2.0-flash';
 
-    const preferredOrder = [
-      'gemini-2.0-flash',
+    // Lite 모델만 엄격히 허용 (강제 제한)
+    const liteModels = models.filter(m => m.toLowerCase().includes('lite'));
+    const allModels = liteModels.length > 0 ? liteModels : [
       'gemini-2.0-flash-lite',
-      'gemini-1.5-flash',
-      'gemini-1.5-pro'
+      'gemini-2.0-flash-lite-preview-02-05'
     ];
 
-    const allModels = [
-      ...preferredOrder.filter(m => models.includes(m)),
-      ...models.filter(m => !preferredOrder.includes(m))
-    ];
-
-    if (allModels.length === 0) return;
+    let currentVal = this.config.gemini_model || 'gemini-2.0-flash-lite';
+    if (!currentVal.toLowerCase().includes('lite')) {
+      currentVal = 'gemini-2.0-flash-lite';
+    }
 
     this.dom.selectGeminiModel.innerHTML = '';
     allModels.forEach(m => {
       const opt = document.createElement('option');
       opt.value = m;
       let label = m;
-      if (m === 'gemini-2.0-flash') label = `${m} (고속 / 권장)`;
-      else if (m === 'gemini-2.0-flash-lite') label = `${m} (초고속 / 경량)`;
-      else if (m === 'gemini-1.5-flash') label = `${m} (안정적 표준)`;
-      else if (m === 'gemini-1.5-pro') label = `${m} (심층 추론)`;
+      if (m === 'gemini-2.0-flash-lite') label = `${m} (초고속 / 경량 / 권장)`;
+      else label = `${m} (Lite)`;
       opt.textContent = label;
       this.dom.selectGeminiModel.appendChild(opt);
     });
@@ -1791,17 +1796,18 @@ class PagerApp {
       throw new Error("Gemini API 키를 입력해주세요.");
     }
 
-    let model = (this.config.gemini_model || "gemini-2.0-flash").trim();
-    if (model.includes('2.5')) {
-      model = 'gemini-2.0-flash';
+    // Lite 모델로 엄격히 강제 제한
+    let model = (this.config.gemini_model || "gemini-2.0-flash-lite").trim();
+    if (!model.toLowerCase().includes('lite')) {
+      model = 'gemini-2.0-flash-lite';
     }
 
     const body = this.buildGeminiSingleMessageRequestBody(hint);
 
-    // 우선 설정된 모델 호출, 404 발생 시 대체 모델 시도
+    // Lite 모델만 순차 시도 (404 발생 시 대체 Lite 모델 시도)
     const tryModels = [model];
-    if (model !== 'gemini-1.5-flash') tryModels.push('gemini-1.5-flash');
-    if (model !== 'gemini-2.0-flash') tryModels.push('gemini-2.0-flash');
+    if (model !== 'gemini-2.0-flash-lite') tryModels.push('gemini-2.0-flash-lite');
+    if (!tryModels.includes('gemini-2.0-flash-lite-preview-02-05')) tryModels.push('gemini-2.0-flash-lite-preview-02-05');
 
     let lastErrText = "";
 
