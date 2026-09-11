@@ -927,7 +927,7 @@ class PagerApp {
   }
 
   // ── 데이터 헬퍼 ──
-  truncateText(text, maxLen = 30) {
+  truncateText(text, maxLen = 50) {
     if (!text) return "";
     return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
   }
@@ -945,7 +945,7 @@ class PagerApp {
     if (!msg) return null;
     return {
       ...msg,
-      text: this.truncateText(msg.text, 30)
+      text: this.truncateText(msg.text, 50)
     };
   }
 
@@ -1510,7 +1510,7 @@ class PagerApp {
               <input type="text" class="msg-time-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.time_info || ''}" placeholder="시간 (예: 09:00 - 10:00)">
               <button class="btn-del-msg" data-sidx="${sIdx}" data-midx="${mIdx}" title="메시지 삭제">&times;</button>
             </div>
-            <input type="text" class="msg-text-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.text || ''}" placeholder="메시지 내용 입력">
+            <input type="text" class="msg-text-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.text || ''}" placeholder="메시지 내용 입력 (최대 50자)" maxlength="50">
           </div>
         `;
       });
@@ -1648,7 +1648,7 @@ class PagerApp {
       "",
       "규칙:",
       "- 이유는 알 수 없지만 절대적으로 순응해야 하는, 서늘하고 단호한 명령조로 쓴다. (예: '~할 것.', '~하라.')",
-      "- 지령 문구는 30자 이내로 간결하게 작성한다.",
+      "- 지령 문구는 50자 이내로 간결하게 작성한다.",
       "- 실존 캐릭터 이름이나 대사를 그대로 재현하지 말고, 분위기만 차용한 창작 지령을 만든다.",
       "- 매번 새롭고 다른, 다소 황당하더라도 그럴듯한 소재로 작성한다.",
       "- 반드시 한국어로만 작성한다.",
@@ -1665,7 +1665,7 @@ class PagerApp {
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       generationConfig: {
         temperature: 1.1,
-        maxOutputTokens: 150
+        maxOutputTokens: 200
       }
     };
   }
@@ -1819,7 +1819,7 @@ class PagerApp {
               if (this.dom.selectGeminiModel) this.dom.selectGeminiModel.value = targetModel;
             }
             const cleaned = rawText.trim().replace(/^[\"\'\s]+|[\"\'\s]+$/g, "");
-            return this.truncateText(cleaned, 30);
+            return this.truncateText(cleaned, 50);
           }
         } else {
           lastErrText = await resp.text().catch(() => "");
@@ -1967,7 +1967,7 @@ class PagerApp {
       events.forEach((evt, idx) => {
         const stageIdx = idx % 3;
         stages[stageIdx].messages.push({
-          text: this.truncateText(evt.summary, 30),
+          text: this.truncateText(evt.summary, 50),
           time_info: evt.timeStr || ""
         });
       });
