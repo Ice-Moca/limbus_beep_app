@@ -66,6 +66,12 @@ html, body {
   letter-spacing: 0.5px;
 }
 
+/* 공통 표시/숨김 유틸리티 */
+.hidden,
+.section-card.hidden {
+  display: none !important;
+}
+
 /* CRT 스캔라인 & 비네팅 효과 */
 .crt-overlay {
   position: fixed;

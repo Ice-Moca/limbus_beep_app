@@ -80,6 +80,64 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun httpPost(urlStr: String, jsonBody: String): String {
+            return try {
+                val url = java.net.URL(urlStr.trim())
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 15000
+                conn.readTimeout = 20000
+                conn.instanceFollowRedirects = true
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                conn.setRequestProperty("Accept", "application/json")
+                conn.outputStream.use { os ->
+                    val input = jsonBody.toByteArray(Charsets.UTF_8)
+                    os.write(input, 0, input.size)
+                }
+                val responseCode = conn.responseCode
+                val stream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+                val responseText = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                
+                val result = org.json.JSONObject()
+                result.put("status", responseCode)
+                result.put("data", responseText)
+                result.toString()
+            } catch (e: Exception) {
+                val result = org.json.JSONObject()
+                result.put("status", -1)
+                result.put("error", e.message ?: "Network error")
+                result.toString()
+            }
+        }
+
+        @JavascriptInterface
+        fun httpGet(urlStr: String): String {
+            return try {
+                val url = java.net.URL(urlStr.trim())
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 15000
+                conn.readTimeout = 20000
+                conn.instanceFollowRedirects = true
+                conn.setRequestProperty("Accept", "application/json")
+                val responseCode = conn.responseCode
+                val stream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+                val responseText = stream?.bufferedReader()?.use { it.readText() } ?: ""
+
+                val result = org.json.JSONObject()
+                result.put("status", responseCode)
+                result.put("data", responseText)
+                result.toString()
+            } catch (e: Exception) {
+                val result = org.json.JSONObject()
+                result.put("status", -1)
+                result.put("error", e.message ?: "Network error")
+                result.toString()
+            }
+        }
+
+        @JavascriptInterface
         fun syncAlarms(jsonStr: String) {
             try {
                 cancelAllAlarms()
@@ -268,6 +326,8 @@ class MainActivity : AppCompatActivity() {
         settings.domStorageEnabled = true
         settings.allowFileAccess = true
         settings.allowContentAccess = true
+        settings.allowFileAccessFromFileURLs = true
+        settings.allowUniversalAccessFromFileURLs = true
         settings.databaseEnabled = true
         settings.mediaPlaybackRequiresUserGesture = false
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW

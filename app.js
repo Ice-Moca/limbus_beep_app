@@ -20,7 +20,7 @@ const DEFAULT_CONFIG = {
   ai_stage_count: 3,        // AI 모드 진행 단계 수 (1~5)
   gemini_api_key: '',
   gemini_hint: '',
-  gemini_model: 'gemini-2.5-flash',
+  gemini_model: 'gemini-2.0-flash',
   volume: 80,
   orientation: 'landscape', // landscape | portrait | sensor (가로 모드 기본)
   ics_url: '',
@@ -337,7 +337,7 @@ class PagerApp {
         this.dom.btnRefreshModels.textContent = "조회 중...";
         await this.fetchAvailableModels(key);
         this.dom.btnRefreshModels.disabled = false;
-        this.dom.btnRefreshModels.textContent = "목록 새로고침 ↻";
+        this.dom.btnRefreshModels.textContent = "목록 새로고침";
         this.showToast("지원되는 모델 목록을 새로고침했습니다.");
       });
     }
@@ -516,6 +516,9 @@ class PagerApp {
       }
       if (!parsed.ai_stage_count) {
         config.ai_stage_count = 3;
+      }
+      if (!config.gemini_model || config.gemini_model.includes('2.5')) {
+        config.gemini_model = 'gemini-2.0-flash';
       }
       return config;
     } catch {
@@ -1253,14 +1256,19 @@ class PagerApp {
       this.dom.toggleDirectiveMode.checked = isAi;
     }
     if (this.dom.badgeCurrentMode) {
-      this.dom.badgeCurrentMode.textContent = isAi ? "AI 실시간 생성" : "수동 / 캘린더 모드";
+      this.dom.badgeCurrentMode.textContent = isAi ? "AI 실시간 생성" : "수동 모드";
       this.dom.badgeCurrentMode.className = `mode-state-pill ${isAi ? 'pill-ai' : 'pill-manual'}`;
     }
     if (this.dom.cardAiConfig) {
       this.dom.cardAiConfig.classList.toggle('hidden', !isAi);
+      this.dom.cardAiConfig.style.display = isAi ? 'flex' : 'none';
     }
     if (this.dom.cardManualConfig) {
       this.dom.cardManualConfig.classList.toggle('hidden', isAi);
+      this.dom.cardManualConfig.style.display = isAi ? 'none' : 'flex';
+      if (!isAi) {
+        this.renderCustomStageCards();
+      }
     }
     if (this.dom.labelAiStageCount) {
       this.dom.labelAiStageCount.textContent = `${this.config.ai_stage_count || 3} STAGES`;
@@ -1467,10 +1475,55 @@ class PagerApp {
     };
   }
 
+  // ── 범용 HTTP 통신 헬퍼 (Android Native Bridge 우선, fetch 폴백) ──
+  async nativeOrFetch(url, method = 'GET', body = null) {
+    if (window.AndroidBridge) {
+      try {
+        if (method === 'POST' && typeof window.AndroidBridge.httpPost === 'function') {
+          const bodyStr = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : '';
+          const respStr = window.AndroidBridge.httpPost(url, bodyStr);
+          if (respStr && respStr.startsWith('{')) {
+            const parsed = JSON.parse(respStr);
+            return {
+              ok: parsed.status >= 200 && parsed.status < 300,
+              status: parsed.status,
+              text: async () => parsed.data || '',
+              json: async () => JSON.parse(parsed.data || '{}')
+            };
+          }
+        } else if (method === 'GET' && typeof window.AndroidBridge.httpGet === 'function') {
+          const respStr = window.AndroidBridge.httpGet(url);
+          if (respStr && respStr.startsWith('{')) {
+            const parsed = JSON.parse(respStr);
+            return {
+              ok: parsed.status >= 200 && parsed.status < 300,
+              status: parsed.status,
+              text: async () => parsed.data || '',
+              json: async () => JSON.parse(parsed.data || '{}')
+            };
+          }
+        }
+      } catch (e) {
+        console.warn("AndroidBridge HTTP 실패, fetch로 전환:", e);
+      }
+    }
+
+    // 표준 브라우저 fetch
+    const opts = {
+      method: method,
+      headers: { 'Content-Type': 'application/json' }
+    };
+    if (body && method !== 'GET') {
+      opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+    }
+    return await fetch(url, opts);
+  }
+
   async fetchAvailableModels(apiKey) {
     if (!apiKey || apiKey.trim().length < 10) return;
     try {
-      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey.trim())}`);
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey.trim())}`;
+      const resp = await this.nativeOrFetch(url, 'GET');
       if (!resp.ok) return;
       const data = await resp.json();
       if (!data.models || !Array.isArray(data.models)) return;
@@ -1484,18 +1537,17 @@ class PagerApp {
         this.updateModelSelectOptions(validModels);
       }
     } catch (e) {
-      console.warn("모델 목록 조회 실패 (기본 목록 유지):", e);
+      console.warn("모델 목록 조회 실패:", e);
     }
   }
 
   updateModelSelectOptions(models) {
     if (!this.dom.selectGeminiModel) return;
-    const currentVal = this.config.gemini_model || 'gemini-2.5-flash';
+    const currentVal = this.config.gemini_model || 'gemini-2.0-flash';
 
     const preferredOrder = [
-      'gemini-2.5-flash',
       'gemini-2.0-flash',
-      'gemini-2.5-pro',
+      'gemini-2.0-flash-lite',
       'gemini-1.5-flash',
       'gemini-1.5-pro'
     ];
@@ -1505,22 +1557,24 @@ class PagerApp {
       ...models.filter(m => !preferredOrder.includes(m))
     ];
 
+    if (allModels.length === 0) return;
+
     this.dom.selectGeminiModel.innerHTML = '';
     allModels.forEach(m => {
       const opt = document.createElement('option');
       opt.value = m;
       let label = m;
-      if (m === 'gemini-2.5-flash') label = `${m} (기본 / 권장)`;
-      else if (m === 'gemini-2.0-flash') label = `${m} (고속 / 안정)`;
-      else if (m === 'gemini-2.5-pro') label = `${m} (심층 추론)`;
-      else if (m === 'gemini-1.5-flash') label = `${m} (레거시 플래시)`;
+      if (m === 'gemini-2.0-flash') label = `${m} (고속 / 권장)`;
+      else if (m === 'gemini-2.0-flash-lite') label = `${m} (초고속 / 경량)`;
+      else if (m === 'gemini-1.5-flash') label = `${m} (안정적 표준)`;
+      else if (m === 'gemini-1.5-pro') label = `${m} (심층 추론)`;
       opt.textContent = label;
       this.dom.selectGeminiModel.appendChild(opt);
     });
 
     if (allModels.includes(currentVal)) {
       this.dom.selectGeminiModel.value = currentVal;
-    } else if (allModels.length > 0) {
+    } else {
       this.dom.selectGeminiModel.value = allModels[0];
       this.config.gemini_model = allModels[0];
       this.saveConfig({ gemini_model: allModels[0] });
@@ -1533,29 +1587,55 @@ class PagerApp {
       throw new Error("Gemini API 키를 입력해주세요.");
     }
 
-    const model = (this.config.gemini_model || "gemini-2.5-flash").trim();
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    let model = (this.config.gemini_model || "gemini-2.0-flash").trim();
+    if (model.includes('2.5')) {
+      model = 'gemini-2.0-flash';
+    }
+
     const body = this.buildGeminiSingleMessageRequestBody(hint);
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
+    // 우선 설정된 모델 호출, 404 발생 시 대체 모델 시도
+    const tryModels = [model];
+    if (model !== 'gemini-1.5-flash') tryModels.push('gemini-1.5-flash');
+    if (model !== 'gemini-2.0-flash') tryModels.push('gemini-2.0-flash');
 
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      throw new Error(`Gemini API 오류 (HTTP ${resp.status}): ${errText.slice(0, 150)}`);
+    let lastErrText = "";
+
+    for (const targetModel of tryModels) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      try {
+        const resp = await this.nativeOrFetch(url, "POST", body);
+        if (resp.ok) {
+          const data = await resp.json();
+          const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText) {
+            if (this.config.gemini_model !== targetModel) {
+              this.config.gemini_model = targetModel;
+              this.saveConfig({ gemini_model: targetModel });
+              if (this.dom.selectGeminiModel) this.dom.selectGeminiModel.value = targetModel;
+            }
+            const cleaned = rawText.trim().replace(/^[\"\'\s]+|[\"\'\s]+$/g, "");
+            return this.truncateText(cleaned, 30);
+          }
+        } else {
+          lastErrText = await resp.text().catch(() => "");
+          if (resp.status !== 404) {
+            break;
+          }
+        }
+      } catch (fetchErr) {
+        lastErrText = fetchErr.message || "네트워크 오류";
+      }
     }
 
-    const data = await resp.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) {
-      throw new Error("Gemini 응답에서 지령 내용을 찾을 수 없습니다.");
-    }
-
-    const cleaned = rawText.trim().replace(/^[\"\'\s]+|[\"\'\s]+$/g, "");
-    return this.truncateText(cleaned, 30);
+    let parsedMsg = lastErrText;
+    try {
+      const errObj = JSON.parse(lastErrText);
+      if (errObj?.error?.message) {
+        parsedMsg = errObj.error.message;
+      }
+    } catch {}
+    throw new Error(parsedMsg ? `${parsedMsg.slice(0, 120)}` : "지령 생성 실패");
   }
 
   async testGeminiConnection() {
