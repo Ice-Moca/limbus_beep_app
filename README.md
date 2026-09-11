@@ -10,8 +10,8 @@
 
 스마트폰에 설치하여 바로 사용하실 수 있는 **6.2MB 초경량 네이티브 앱**입니다.
 
-* **[최신 프리뷰 APK 다운로드 (v2.2.0-preview)](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.2.0-preview/LimbusBeep-v2.2.0-preview.apk)**
-* **[최신 정식 릴리즈 (v2.1.1)](https://github.com/Ice-Moca/limbus_beep_app/releases/tag/v2.1.1)**
+* **[최신 릴리즈 APK 다운로드 (v2.1.2)](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.1.2/LimbusBeep-v2.1.2.apk)**
+* **[최신 정식 릴리즈 페이지 (v2.1.2)](https://github.com/Ice-Moca/limbus_beep_app/releases/tag/v2.1.2)**
 * **[항상 최신 APK 링크](https://github.com/Ice-Moca/limbus_beep_app/releases/latest/download/LimbusBeep-latest.apk)**
 
 ---

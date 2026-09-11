@@ -11,8 +11,8 @@ android {
         applicationId "com.icemoca.limbusbeep"
         minSdk 24
         targetSdk 35
-        versionCode 6
-        versionName "2.2.0-preview"
+        versionCode 7
+        versionName "2.1.2"
     }
 
     signingConfigs {

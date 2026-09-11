@@ -1,5 +1,5 @@
 /**
- * Limbus Beep - 단테 삐삐 시뮬레이터 v2.2.0-preview
+ * Limbus Beep - 단테 삐삐 시뮬레이터 v2.1.2
  */
 
 // ── 상태 정의 ──
