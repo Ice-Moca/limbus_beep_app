@@ -118,22 +118,20 @@
           <!-- 모드 전환 토글 카드 -->
           <div class="section-card">
             <div class="section-card-header">
-              <span class="card-tag">지령 발급 모드</span>
-              <span id="badge-current-mode" class="mode-state-pill pill-ai">AI 실시간 생성</span>
+              <span class="card-tag">AI 지령 생성 모드</span>
+              <span id="badge-current-mode" class="mode-state-pill pill-manual">수동 모드</span>
             </div>
             <div class="option-row">
-              <div class="option-info">
-                <div class="option-title">AI 실시간 지령 생성 (Gemini)</div>
-              </div>
+              <div class="option-title">AI 지령 생성 사용 (Gemini)</div>
               <label class="switch">
-                <input type="checkbox" id="toggle-directive-mode" checked>
+                <input type="checkbox" id="toggle-directive-mode">
                 <span class="slider-switch"></span>
               </label>
             </div>
           </div>
 
-          <!-- AI 설정 영역 (AI 모드 ON일 때 표시) -->
-          <div class="section-card" id="card-ai-config">
+          <!-- AI 설정 영역 (AI 모드 ON일 때만 표시: 토글 켜야 API 키 입력) -->
+          <div class="section-card hidden" id="card-ai-config">
             <div class="section-card-header">
               <span class="card-tag">GEMINI AI 설정</span>
               <span id="ai-status-indicator" class="status-badge-cyber">API 키 대기 중</span>
@@ -147,8 +145,8 @@
               </div>
               <div class="cyber-input-wrap">
                 <input type="password" id="input-gemini-key" class="cyber-input" placeholder="Google AI Studio API 키를 입력하세요" autocomplete="off" spellcheck="false">
-                <button type="button" id="btn-toggle-key-visibility" class="cyber-input-action-btn" title="비밀번호 보기/숨기기">
-                  <span id="icon-key-visibility">👁</span>
+                <button type="button" id="btn-toggle-key-visibility" class="btn btn-sm btn-secondary" title="키 표시/숨김">
+                  <span id="icon-key-visibility">SHOW</span>
                 </button>
                 <button type="button" id="btn-test-gemini" class="btn btn-sm btn-primary">
                   <span>연결 확인</span>
@@ -178,10 +176,20 @@
               </div>
               <input type="text" id="input-gemini-hint" class="cyber-input" placeholder="예: 야근 중, 긴급 점검, 도시 탐색, 휴식" autocomplete="off" spellcheck="false">
             </div>
+
+            <!-- 4. AI 모드 진행 단계(STAGE) 수 설정 -->
+            <div class="option-row" style="margin-top: 6px;">
+              <div class="option-title">진행 단계 (STAGE) 수</div>
+              <div class="stage-stepper" style="display:flex;align-items:center;gap:8px;">
+                <button type="button" id="btn-ai-stage-dec" class="btn btn-sm btn-secondary">-</button>
+                <span id="label-ai-stage-count" class="stage-count-badge">3 STAGES</span>
+                <button type="button" id="btn-ai-stage-inc" class="btn btn-sm btn-secondary">+</button>
+              </div>
+            </div>
           </div>
 
           <!-- 수동 메시지 관리 영역 (수동 모드일 때 표시) -->
-          <div class="section-card hidden" id="card-manual-config">
+          <div class="section-card" id="card-manual-config">
             <div class="section-card-header">
               <span class="card-tag">단계별 메시지 관리</span>
             </div>
@@ -410,7 +418,7 @@
       <div class="modal-header">
         <div class="modal-title-group">
           <div class="modal-title">
-            <span id="color-modal-title">🎨 사용자 지정 색상</span>
+            <span id="color-modal-title">사용자 지정 색상</span>
           </div>
         </div>
         <button id="btn-close-color-modal" class="close-btn">&times;</button>

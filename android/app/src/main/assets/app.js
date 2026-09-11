@@ -17,6 +17,7 @@ const CIPHER_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*+-=?<>";
 // ── 기본 설정 및 초기 메시지 ──
 const DEFAULT_CONFIG = {
   directive_mode: 'manual', // 'ai' 또는 'manual'
+  ai_stage_count: 3,        // AI 모드 진행 단계 수 (1~5)
   gemini_api_key: '',
   gemini_hint: '',
   gemini_model: 'gemini-2.5-flash',
@@ -130,6 +131,9 @@ class PagerApp {
       selectGeminiModel: document.getElementById('select-gemini-model'),
       btnRefreshModels: document.getElementById('btn-refresh-models'),
       inputGeminiHint: document.getElementById('input-gemini-hint'),
+      btnAiStageDec: document.getElementById('btn-ai-stage-dec'),
+      btnAiStageInc: document.getElementById('btn-ai-stage-inc'),
+      labelAiStageCount: document.getElementById('label-ai-stage-count'),
 
       // 인앱 알람 배너 DOM
       alarmBanner: document.getElementById('alarm-banner'),
@@ -284,7 +288,7 @@ class PagerApp {
         const isPassword = this.dom.inputGeminiKey.type === 'password';
         this.dom.inputGeminiKey.type = isPassword ? 'text' : 'password';
         if (this.dom.iconKeyVisibility) {
-          this.dom.iconKeyVisibility.textContent = isPassword ? '🔒' : '👁';
+          this.dom.iconKeyVisibility.textContent = isPassword ? 'HIDE' : 'SHOW';
         }
       });
     }
@@ -343,6 +347,37 @@ class PagerApp {
       this.dom.inputGeminiHint.addEventListener('change', (e) => {
         this.config.gemini_hint = e.target.value.trim();
         this.saveConfig({ gemini_hint: this.config.gemini_hint });
+      });
+    }
+
+    // 4-7. AI 모드 진행 단계 (STAGE) 수 Stepper
+    if (this.dom.btnAiStageDec) {
+      this.dom.btnAiStageDec.addEventListener('click', (e) => {
+        e.stopPropagation();
+        let count = this.config.ai_stage_count || 3;
+        if (count > 1) {
+          count--;
+          this.config.ai_stage_count = count;
+          this.saveConfig({ ai_stage_count: count });
+          if (this.dom.labelAiStageCount) {
+            this.dom.labelAiStageCount.textContent = `${count} STAGES`;
+          }
+        }
+      });
+    }
+
+    if (this.dom.btnAiStageInc) {
+      this.dom.btnAiStageInc.addEventListener('click', (e) => {
+        e.stopPropagation();
+        let count = this.config.ai_stage_count || 3;
+        if (count < 5) {
+          count++;
+          this.config.ai_stage_count = count;
+          this.saveConfig({ ai_stage_count: count });
+          if (this.dom.labelAiStageCount) {
+            this.dom.labelAiStageCount.textContent = `${count} STAGES`;
+          }
+        }
       });
     }
 
@@ -477,7 +512,10 @@ class PagerApp {
       const parsed = stored ? JSON.parse(stored) : {};
       const config = { ...DEFAULT_CONFIG, ...parsed };
       if (!parsed.directive_mode) {
-        config.directive_mode = (config.gemini_api_key && config.gemini_api_key.trim().length > 10) ? 'ai' : 'manual';
+        config.directive_mode = 'manual';
+      }
+      if (!parsed.ai_stage_count) {
+        config.ai_stage_count = 3;
       }
       return config;
     } catch {
@@ -836,7 +874,10 @@ class PagerApp {
         return;
       }
 
-      if (this.state === STATE.IDLE || this.state === STATE.REVEALED || this.state === STATE.CLEAR || this.state === STATE.COMPLETE) {
+      const totalAiStages = this.config.ai_stage_count || 3;
+
+      if (this.state === STATE.IDLE) {
+        this.currentStageIdx = 0;
         this.startAiBeeping();
       } else if (this.state === STATE.BEEPING) {
         // AI 응답 대기 중
@@ -844,6 +885,18 @@ class PagerApp {
         if (this.pendingAiMessage) {
           this.startAiRevealed(this.pendingAiMessage);
         }
+      } else if (this.state === STATE.REVEALED) {
+        if (this.currentStageIdx + 1 < totalAiStages) {
+          this.startClear();
+        } else {
+          this.startComplete();
+        }
+      } else if (this.state === STATE.CLEAR) {
+        this.currentStageIdx++;
+        this.startAiBeeping();
+      } else if (this.state === STATE.COMPLETE) {
+        this.currentStageIdx = 0;
+        this.startIdle();
       }
     } else {
       // ── 수동 / 캘린더 모드 (기존 STAGE 순차 진행) ──
@@ -920,7 +973,8 @@ class PagerApp {
     this.clearTimers();
     this.playBeepSound();
 
-    this.dom.displaySubLabel.textContent = "지령 수신 중...";
+    const stageNum = this.currentStageIdx + 1;
+    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // 지령 수신 중...`;
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayMain.className = 'main-text dimmed';
@@ -947,7 +1001,8 @@ class PagerApp {
         if (this.state !== STATE.BEEPING) return;
         this.clearTimers();
         this.dom.displayDots.textContent = "";
-        this.dom.displaySubLabel.textContent = "지령 수신 실패";
+        const curStage = this.currentStageIdx + 1;
+        this.dom.displaySubLabel.textContent = `STAGE ${curStage} // 지령 수신 실패`;
         this.dom.displayMain.textContent = "통신 에러 // 터치하여 재시도";
         this.dom.displayMain.className = 'main-text amber';
         this.state = STATE.IDLE;
@@ -959,8 +1014,9 @@ class PagerApp {
     this.state = STATE.DECODING;
     this.clearTimers();
 
+    const stageNum = this.currentStageIdx + 1;
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "지령 수신 중... // DECRYPTING";
+    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // DECRYPTING...`;
     this.dom.progressBar.classList.add('visible');
     this.dom.displayTime.classList.remove('visible');
 
@@ -989,9 +1045,10 @@ class PagerApp {
     this.state = STATE.REVEALED;
     this.clearTimers();
 
+    const stageNum = this.currentStageIdx + 1;
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "지령 수신 완료";
+    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // 지령 수신 완료`;
     this.dom.displayMain.textContent = targetText;
     this.dom.displayMain.className = 'main-text accent';
     this.dom.displayTime.classList.remove('visible');
@@ -1116,9 +1173,8 @@ class PagerApp {
   updateDisplay() {
     if (this.state === STATE.IDLE) {
       this.dom.displayDots.textContent = "";
-      this.dom.displaySubLabel.textContent = (this.config.directive_mode === 'ai') 
-        ? "GEMINI 실시간 지령 대기" 
-        : `STAGE ${this.currentStageIdx + 1} // READY`;
+      const stageNum = this.currentStageIdx + 1;
+      this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // READY`;
       this.dom.displayMain.textContent = "SPACE 또는 터치하여 시작";
       this.dom.displayMain.className = 'main-text';
       this.dom.displayTime.classList.remove('visible');
@@ -1205,6 +1261,9 @@ class PagerApp {
     }
     if (this.dom.cardManualConfig) {
       this.dom.cardManualConfig.classList.toggle('hidden', isAi);
+    }
+    if (this.dom.labelAiStageCount) {
+      this.dom.labelAiStageCount.textContent = `${this.config.ai_stage_count || 3} STAGES`;
     }
     this.updateModelSelectState();
   }
@@ -1348,6 +1407,7 @@ class PagerApp {
     
     const newConfig = {
       directive_mode: isAi ? 'ai' : 'manual',
+      ai_stage_count: this.config.ai_stage_count || 3,
       gemini_api_key: this.dom.inputGeminiKey ? this.dom.inputGeminiKey.value.trim() : (this.config.gemini_api_key || ''),
       gemini_hint: this.dom.inputGeminiHint ? this.dom.inputGeminiHint.value.trim() : (this.config.gemini_hint || ''),
       gemini_model: this.dom.selectGeminiModel ? this.dom.selectGeminiModel.value : (this.config.gemini_model || 'gemini-2.5-flash'),
@@ -1872,7 +1932,7 @@ class PagerApp {
     const initialHex = (target === 'font') ? (this.config.font_color || '#2FBFFC') : (this.config.bg_color || '#000000');
     
     if (this.dom.colorModalTitle) {
-      this.dom.colorModalTitle.textContent = (target === 'font') ? '🎨 글자 색상 직접 선택' : '🎨 배경 색상 직접 선택';
+      this.dom.colorModalTitle.textContent = (target === 'font') ? '글자 색상 직접 선택' : '배경 색상 직접 선택';
     }
 
     this.renderQuickPresets(target);
