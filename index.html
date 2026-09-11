@@ -99,20 +99,20 @@
       <!-- 세그먼트 탭 네비게이션 -->
       <div class="modal-tabs">
         <button class="tab-btn active" data-tab="tab-messages">
-          <span>지령 / 메시지</span>
+          <span>지령</span>
         </button>
         <button class="tab-btn" data-tab="tab-calendar">
           <span>캘린더 연동</span>
         </button>
         <button class="tab-btn" data-tab="tab-sound">
-          <span>화면 / 사운드 / 알람</span>
+          <span>화면</span>
         </button>
       </div>
 
       <!-- 모달 본문 영역 -->
       <div class="modal-body">
         
-        <!-- ── 탭 1: 지령 / 메시지 설정 (AI 실시간 생성 or 수동 입력) ── -->
+        <!-- ── 탭 1: 지령 설정 (AI 실시간 생성 or 수동 입력) ── -->
         <div id="tab-messages" class="tab-pane active">
 
           <!-- 모드 전환 토글 카드 -->
@@ -124,10 +124,6 @@
             <div class="option-row">
               <div class="option-info">
                 <div class="option-title">AI 실시간 지령 생성 (Gemini)</div>
-                <div class="option-desc" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
-                  ON: 화면 터치마다 Gemini API로 프로젝트 문 지령 실시간 발급<br>
-                  OFF: 등록된 단계별(STAGE) 메시지 및 캘린더 일정 순차 재생
-                </div>
               </div>
               <label class="switch">
                 <input type="checkbox" id="toggle-directive-mode" checked>
@@ -173,17 +169,14 @@
                 <option value="gemini-2.5-pro">gemini-2.5-pro (심층 추론)</option>
                 <option value="gemini-1.5-flash">gemini-1.5-flash (레거시 플래시)</option>
               </select>
-              <div id="model-select-hint" class="cyber-field-hint">API 키를 먼저 입력하고 확인하면 지원되는 모델을 선택할 수 있습니다.</div>
             </div>
 
             <!-- 3. 상황 힌트 입력 -->
             <div class="cyber-field-group" style="margin-top: 6px;">
               <div class="field-label-row">
-                <label class="field-label" for="input-gemini-hint">지령 상황 힌트 (CONTEXT HINT)</label>
-                <span class="field-optional-tag">선택</span>
+                <label class="field-label" for="input-gemini-hint">지령 상황 힌트 (선택)</label>
               </div>
               <input type="text" id="input-gemini-hint" class="cyber-input" placeholder="예: 야근 중, 긴급 점검, 도시 탐색, 휴식" autocomplete="off" spellcheck="false">
-              <div class="cyber-field-hint">입력한 상황 힌트에 맞춰 어조와 지령 내용이 실시간 반영됩니다.</div>
             </div>
           </div>
 
@@ -219,18 +212,13 @@
         <!-- ── 탭 2: 캘린더 연동 (iCal 전용) ── -->
         <div id="tab-calendar" class="tab-pane">
           
-          <div id="calendar-ai-notice" class="info-tip-box hidden" style="margin-bottom: 6px;">
-            <div class="tip-title">알림</div>
-            <div class="tip-desc">현재 AI 실시간 생성 모드가 켜져 있습니다. [지령 / 메시지] 탭에서 수동 모드로 전환 시 캘린더 일정이 화면에 순차 재생됩니다.</div>
-          </div>
-
           <!-- iCal 비공개 URL 연동 -->
           <div class="section-card">
             <div class="section-card-header">
               <span class="card-tag">Google 캘린더 iCal 연동</span>
             </div>
             <div class="input-with-btn">
-              <input type="text" id="input-ics-url" placeholder="Google 캘린더 iCal 비공개 주소 입력 (https://.../basic.ics)" autocomplete="off" spellcheck="false">
+              <input type="text" id="input-ics-url" placeholder="iCal 비공개 주소 입력 (https://.../basic.ics)" autocomplete="off" spellcheck="false">
               <button id="btn-sync-now" class="btn btn-primary">동기화</button>
             </div>
           </div>
@@ -245,11 +233,6 @@
               <option value="30">30분</option>
               <option value="60" selected>1시간</option>
             </select>
-          </div>
-
-          <div class="info-tip-box">
-            <div class="tip-title">iCal 주소 확인 방법</div>
-            <div class="tip-desc">Google 캘린더 웹 설정 &gt; 내 캘린더의 설정 &gt; 캘린더 통합 &gt; 'iCal 형식의 비공개 주소'를 복사해 붙여넣으세요.</div>
           </div>
 
         </div>
@@ -397,9 +380,6 @@
             <div class="option-row">
               <div class="option-info">
                 <div class="option-title">등록 시간 알람 알림</div>
-                <div class="option-desc" style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
-                  일정에 등록된 시간(예: 09:00)이 되면 비프음과 함께 알람을 울립니다.
-                </div>
               </div>
               <label class="switch">
                 <input type="checkbox" id="toggle-alarm" checked>

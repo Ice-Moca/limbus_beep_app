@@ -119,7 +119,6 @@ class PagerApp {
       badgeCurrentMode: document.getElementById('badge-current-mode'),
       cardAiConfig: document.getElementById('card-ai-config'),
       cardManualConfig: document.getElementById('card-manual-config'),
-      calendarAiNotice: document.getElementById('calendar-ai-notice'),
 
       // Gemini AI 설정 DOM
       inputGeminiKey: document.getElementById('input-gemini-key'),
@@ -130,7 +129,6 @@ class PagerApp {
       aiStatusIndicator: document.getElementById('ai-status-indicator'),
       selectGeminiModel: document.getElementById('select-gemini-model'),
       btnRefreshModels: document.getElementById('btn-refresh-models'),
-      modelSelectHint: document.getElementById('model-select-hint'),
       inputGeminiHint: document.getElementById('input-gemini-hint'),
 
       // 인앱 알람 배너 DOM
@@ -1208,9 +1206,6 @@ class PagerApp {
     if (this.dom.cardManualConfig) {
       this.dom.cardManualConfig.classList.toggle('hidden', isAi);
     }
-    if (this.dom.calendarAiNotice) {
-      this.dom.calendarAiNotice.classList.toggle('hidden', !isAi);
-    }
     this.updateModelSelectState();
   }
 
@@ -1221,15 +1216,6 @@ class PagerApp {
     }
     if (this.dom.btnRefreshModels) {
       this.dom.btnRefreshModels.disabled = !hasKey;
-    }
-    if (this.dom.modelSelectHint) {
-      if (hasKey) {
-        this.dom.modelSelectHint.textContent = "사용할 모델을 선택하세요. (기본 권장: gemini-2.5-flash)";
-        this.dom.modelSelectHint.className = "cyber-field-hint";
-      } else {
-        this.dom.modelSelectHint.textContent = "API 키를 먼저 입력하고 확인하면 지원되는 모델을 선택할 수 있습니다.";
-        this.dom.modelSelectHint.className = "cyber-field-hint";
-      }
     }
     if (this.dom.aiStatusIndicator) {
       if (hasKey) {
