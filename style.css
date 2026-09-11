@@ -230,8 +230,11 @@ html, body {
   justify-content: center;
   align-items: center;
   text-align: center;
-  padding: 20px;
+  padding: 16px 20px;
   z-index: 10;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .screen-content {
@@ -241,37 +244,41 @@ html, body {
   justify-content: center;
   width: 100%;
   max-width: 1200px;
+  box-sizing: border-box;
 }
 
 .dots-display {
-  font-size: clamp(18px, 3.5vmin, 32px);
+  font-size: clamp(16px, 3.2vmin, 32px);
   color: var(--amber-accent);
   margin-bottom: 8px;
-  min-height: 36px;
+  min-height: 32px;
   letter-spacing: 4px;
 }
 
 .sub-label {
-  font-size: clamp(13px, 2vmin, 18px);
+  font-size: clamp(12px, 2vmin, 16px);
   color: var(--text-dim);
-  margin-bottom: 16px;
-  min-height: 24px;
+  margin-bottom: 14px;
+  min-height: 22px;
   letter-spacing: 1px;
 }
 
 .main-text {
-  font-size: clamp(28px, 6.5vmin, 72px);
+  font-size: clamp(20px, 5.5vmin, 64px);
   color: var(--cyan-primary);
   font-weight: bold;
-  letter-spacing: 2px;
-  line-height: 1.25;
+  letter-spacing: 1.5px;
+  line-height: 1.3;
   text-shadow: 0 0 16px var(--cyan-glow);
   word-break: keep-all;
-  max-width: 90%;
-  min-height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-wrap: anywhere;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0 8px;
+  min-height: 72px;
+  display: block;
+  text-align: center;
 }
 
 .main-text.dimmed {
@@ -1919,6 +1926,72 @@ input:checked + .slider-switch:before {
 
   .quick-preset-chip {
     border-radius: 3px;
+  }
+}
+
+/* ── 세로 모드 반응형 최적화 (Portrait & Mobile Narrow Screen) ── */
+@media (orientation: portrait), (max-width: 600px) {
+  .pager-container {
+    padding: clamp(14px, 2.5vh, 22px) clamp(16px, 4.5vw, 24px);
+  }
+
+  .terminal-frame {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+
+  .pager-screen {
+    padding: 10px 8px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .screen-content {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0 4px;
+  }
+
+  .main-text {
+    font-size: clamp(15px, 4.5vw, 24px);
+    letter-spacing: 1px;
+    line-height: 1.35;
+    padding: 0 6px;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    display: block;
+    text-align: center;
+  }
+
+  .dots-display {
+    font-size: clamp(13px, 3.2vw, 18px);
+    min-height: 20px;
+    margin-bottom: 4px;
+    letter-spacing: 3px;
+  }
+
+  .sub-label {
+    font-size: clamp(11px, 2.8vw, 14px);
+    min-height: 18px;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+
+  .time-badge {
+    font-size: clamp(11px, 2.8vw, 14px);
+    margin-top: 10px;
+  }
+
+  .progress-bar-container {
+    width: min(280px, 86%);
+    margin-top: 12px;
   }
 }
 

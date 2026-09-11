@@ -364,7 +364,7 @@ class PagerApp {
           this.config.ai_stage_count = count;
           this.saveConfig({ ai_stage_count: count });
           if (this.dom.labelAiStageCount) {
-            this.dom.labelAiStageCount.textContent = `${count} STAGES`;
+            this.dom.labelAiStageCount.textContent = `${count}단계`;
           }
         }
       });
@@ -379,7 +379,7 @@ class PagerApp {
           this.config.ai_stage_count = count;
           this.saveConfig({ ai_stage_count: count });
           if (this.dom.labelAiStageCount) {
-            this.dom.labelAiStageCount.textContent = `${count} STAGES`;
+            this.dom.labelAiStageCount.textContent = `${count}단계`;
           }
         }
       });
@@ -502,11 +502,11 @@ class PagerApp {
         messages: [{ text: `새로운 지령 메시지`, time_info: "" }]
       });
       this.renderCustomStageCards();
-      this.showToast(`STAGE ${newStageNum} 추가됨`);
+      this.showToast(`${newStageNum}단계 추가됨`);
     });
 
     this.dom.btnLoadSample.addEventListener('click', () => {
-      if (confirm("기본 예시 STAGE로 덮어쓰시겠습니까?")) {
+      if (confirm("기본 예시 단계로 덮어쓰시겠습니까?")) {
         this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
         this.renderCustomStageCards();
         this.showToast("기본 예시 불러오기 완료");
@@ -514,13 +514,13 @@ class PagerApp {
     });
 
     this.dom.btnClearMessages.addEventListener('click', () => {
-      if (confirm("모든 STAGE 메시지를 비우시겠습니까?")) {
+      if (confirm("모든 단계 메시지를 비우시겠습니까?")) {
         this.customStages = [{
           stage: 1,
           messages: [{ text: "", time_info: "" }]
         }];
         this.renderCustomStageCards();
-        this.showToast("STAGE가 비워졌습니다.");
+        this.showToast("모든 단계가 비워졌습니다.");
       }
     });
 
@@ -949,9 +949,21 @@ class PagerApp {
     };
   }
 
-  getRandomCipher(len = 10) {
+  getRandomCipher(lenOrTemplate = 10) {
+    if (typeof lenOrTemplate === 'string') {
+      let res = "";
+      for (let i = 0; i < lenOrTemplate.length; i++) {
+        if (lenOrTemplate[i] === ' ') {
+          res += ' ';
+        } else {
+          res += CIPHER_CHARS[Math.floor(Math.random() * CIPHER_CHARS.length)];
+        }
+      }
+      return res;
+    }
     let res = "";
-    for (let i = 0; i < len; i++) {
+    for (let i = 0; i < lenOrTemplate; i++) {
+      if (i > 0 && i % 6 === 0) res += ' ';
       res += CIPHER_CHARS[Math.floor(Math.random() * CIPHER_CHARS.length)];
     }
     return res;
@@ -1115,7 +1127,8 @@ class PagerApp {
     this.clearTimers();
     this.playBeepSound();
 
-    this.dom.displaySubLabel.textContent = "";
+    const stageNum = this.currentStageIdx + 1;
+    this.dom.displaySubLabel.textContent = `${stageNum}단계`;
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayMain.className = 'main-text loading';
@@ -1165,8 +1178,9 @@ class PagerApp {
     this.clearTimers();
     this.state = STATE.DECODING;
 
+    const stageNum = this.currentStageIdx + 1;
     this.dom.displayDots.textContent = "• • •";
-    this.dom.displaySubLabel.textContent = "▼ 지령 복호화 진행 중... ▼";
+    this.dom.displaySubLabel.textContent = `▼ ${stageNum}단계 복호화 진행 중... ▼`;
     this.dom.progressBar.classList.add('visible');
     this.dom.displayTime.classList.remove('visible');
 
@@ -1205,9 +1219,10 @@ class PagerApp {
     this.clearTimers();
     this.state = STATE.REVEALED;
 
+    const stageNum = this.currentStageIdx + 1;
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
+    this.dom.displaySubLabel.textContent = `${stageNum}단계`;
     this.dom.displayMain.textContent = targetText;
     this.dom.displayMain.className = 'main-text accent';
     this.dom.displayTime.classList.remove('visible');
@@ -1219,10 +1234,11 @@ class PagerApp {
     this.clearTimers();
     this.playBeepSound();
 
+    const stageNum = this.currentStageIdx + 1;
     const msg = this.getCurrentMessage();
-    const cipherLen = msg ? Math.max(9, msg.text.length) : 11;
+    const template = msg ? msg.text : "NO DATA FOUND";
 
-    this.dom.displaySubLabel.textContent = "신호 수신 중...";
+    this.dom.displaySubLabel.textContent = `${stageNum}단계 // 신호 수신 중...`;
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayMain.className = 'main-text dimmed';
@@ -1233,7 +1249,7 @@ class PagerApp {
       dotStep = (dotStep + 1) % 4;
       const dots = "• ".repeat(dotStep) + "◦ ".repeat(3 - dotStep);
       this.dom.displayDots.textContent = dots;
-      this.dom.displayMain.textContent = this.getRandomCipher(cipherLen);
+      this.dom.displayMain.textContent = this.getRandomCipher(template);
     }, 100);
 
     const beepDur = (this.config.decode_speed === 'fast') ? 600 : (this.config.decode_speed === 'slow') ? 1800 : 1100;
@@ -1247,6 +1263,7 @@ class PagerApp {
     this.clearTimers();
     this.state = STATE.DECODING;
 
+    const stageNum = this.currentStageIdx + 1;
     const msg = this.getCurrentMessage();
     if (!msg) {
       this.startIdle();
@@ -1255,7 +1272,7 @@ class PagerApp {
 
     const targetText = msg.text;
     this.dom.displayDots.textContent = "• • •";
-    this.dom.displaySubLabel.textContent = "▼ 데이터 복호화 진행 중... ▼";
+    this.dom.displaySubLabel.textContent = `▼ ${stageNum}단계 복호화 진행 중... ▼`;
     this.dom.progressBar.classList.add('visible');
     this.dom.displayTime.classList.remove('visible');
 
@@ -1295,12 +1312,13 @@ class PagerApp {
     this.clearTimers();
     this.state = STATE.REVEALED;
 
+    const stageNum = this.currentStageIdx + 1;
     const msg = this.getCurrentMessage();
     if (!msg) return;
 
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
+    this.dom.displaySubLabel.textContent = `${stageNum}단계`;
     this.dom.displayMain.textContent = msg.text;
     this.dom.displayMain.className = 'main-text accent';
 
@@ -1317,10 +1335,11 @@ class PagerApp {
     this.clearTimers();
     this.state = STATE.CLEAR;
 
+    const stageNum = this.currentStageIdx + 1;
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
+    this.dom.displaySubLabel.textContent = `${stageNum}단계 완료`;
     this.dom.displayMain.textContent = "_CLEAR._";
     this.dom.displayMain.className = 'main-text amber';
   }
@@ -1333,15 +1352,16 @@ class PagerApp {
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
+    this.dom.displaySubLabel.textContent = "모든 단계 완료";
     this.dom.displayMain.textContent = "_ALL_CLEAR._";
     this.dom.displayMain.className = 'main-text amber';
   }
 
   updateDisplay() {
     if (this.state === STATE.IDLE) {
+      const stageNum = this.currentStageIdx + 1;
       this.dom.displayDots.textContent = "";
-      this.dom.displaySubLabel.textContent = "";
+      this.dom.displaySubLabel.textContent = `${stageNum}단계`;
       this.dom.displayMain.textContent = "SPACE 를 눌러 시작";
       this.dom.displayMain.className = 'main-text';
       this.dom.displayTime.classList.remove('visible');
@@ -1443,7 +1463,7 @@ class PagerApp {
       }
     }
     if (this.dom.labelAiStageCount) {
-      this.dom.labelAiStageCount.textContent = `${this.config.ai_stage_count || 3} STAGES`;
+      this.dom.labelAiStageCount.textContent = `${this.config.ai_stage_count || 3}단계`;
     }
     this.updateModelSelectState();
   }
@@ -1467,12 +1487,12 @@ class PagerApp {
     }
   }
 
-  // ── 동적 STAGE 카드 렌더링 (각 메시지가 개별 카드로 분리됨) ──
+  // ── 동적 단계 카드 렌더링 (각 메시지가 개별 카드로 분리됨) ──
   renderCustomStageCards() {
     if (!this.dom.stageCardsContainer) return;
     this.dom.stageCardsContainer.innerHTML = '';
     if (this.dom.labelCustomStageCount) {
-      this.dom.labelCustomStageCount.textContent = `${this.customStages.length} STAGES`;
+      this.dom.labelCustomStageCount.textContent = `${this.customStages.length}단계`;
     }
 
     const pillClasses = ['stage-pill-cyan', 'stage-pill-amber', 'stage-pill-green'];
@@ -1501,7 +1521,7 @@ class PagerApp {
       stageCard.innerHTML = `
         <div class="stage-edit-header">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span class="stage-pill ${pillClass}">STAGE ${stageNum}</span>
+            <span class="stage-pill ${pillClass}">${stageNum}단계</span>
             <span class="stage-sub-hint">메시지 ${messages.length}개</span>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
@@ -1521,7 +1541,7 @@ class PagerApp {
           const targetIdx = parseInt(e.target.dataset.sidx, 10);
           this.customStages.splice(targetIdx, 1);
           this.renderCustomStageCards();
-          this.showToast(`STAGE 삭제됨 (현재 ${this.customStages.length}개)`);
+          this.showToast(`${targetIdx + 1}단계 삭제됨 (현재 ${this.customStages.length}단계)`);
         });
       }
 
@@ -1571,14 +1591,14 @@ class PagerApp {
     for (let i = 0; i < this.customStages.length; i++) {
       const msgs = this.customStages[i].messages;
       if (!msgs || msgs.length === 0) {
-        this.showToast(`STAGE ${i + 1}에 최소 1개 이상의 메시지를 추가해주세요.`);
+        this.showToast(`${i + 1}단계에 최소 1개 이상의 메시지를 추가해주세요.`);
         return;
       }
     }
 
     this.saveStoredMessages(this.customStages);
     this.closeModal();
-    this.showToast("커스텀 STAGE 메시지가 적용되었습니다.");
+    this.showToast("커스텀 단계 메시지가 적용되었습니다.");
   }
 
   saveSettingsFromModal() {
