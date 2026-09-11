@@ -355,13 +355,13 @@ html, body {
   top: 0; left: 0; right: 0; bottom: 0;
   background: repeating-linear-gradient(
     0deg,
-    rgba(0, 0, 0, 0.55) 0px,
-    rgba(0, 0, 0, 0.55) 1.5px,
+    rgba(0, 0, 0, 0.45) 0px,
+    rgba(0, 0, 0, 0.45) 1.5px,
     transparent 1.5px,
     transparent 3px
   );
   pointer-events: none;
-  z-index: 10;
+  z-index: 2;
   display: block;
 }
 
@@ -372,10 +372,10 @@ html, body {
 .mini-crt-vignette {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.75) 100%);
-  box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.95);
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.6) 100%);
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.75);
   pointer-events: none;
-  z-index: 11;
+  z-index: 2;
   display: block;
 }
 
@@ -388,16 +388,7 @@ html, body {
   align-items: center;
   gap: 6px;
   position: relative;
-  z-index: 4;
-}
-
-.mini-screen-body {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
-  position: relative;
-  z-index: 4;
+  z-index: 5;
 }
 
 .mini-decor-dot {
@@ -421,6 +412,8 @@ html, body {
   justify-content: space-between;
   align-items: center;
   padding: 4px 0;
+  position: relative;
+  z-index: 5;
 }
 
 .mini-preview-text {
@@ -429,6 +422,10 @@ html, body {
   color: var(--cyan-primary);
   text-shadow: 0 0 10px var(--cyan-glow);
   letter-spacing: 1px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: color 0.2s ease, text-shadow 0.2s ease;
 }
 
@@ -437,6 +434,9 @@ html, body {
   color: var(--amber-accent);
   text-shadow: 0 0 8px rgba(255, 152, 0, 0.5);
   letter-spacing: 1px;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .color-setting-block {
@@ -1788,17 +1788,25 @@ input:checked + .slider-switch:before {
   }
 
   .theme-mini-preview {
-    height: 52px;
-    padding: 4px 10px;
-    margin-bottom: 6px;
+    min-height: 56px;
+    height: auto;
+    padding: 6px 12px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+
+  .mini-screen-body {
+    padding: 2px 0;
   }
 
   .mini-preview-text {
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 1.2;
   }
 
   .mini-preview-time {
     font-size: 11px;
+    line-height: 1.2;
   }
 
   .color-setting-block {

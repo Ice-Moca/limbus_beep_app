@@ -443,8 +443,10 @@ class PagerApp {
     // 11. 원클릭 색상 프리셋 칩 클릭 (자동 저장 적용)
     this.dom.colorChips.forEach(chip => {
       chip.addEventListener('click', (e) => {
-        const type = e.target.dataset.type;
-        const color = e.target.dataset.color;
+        const btn = e.target.closest('.color-circle-chip');
+        if (!btn) return;
+        const type = btn.dataset.type;
+        const color = btn.dataset.color;
         if (!type || !color) return;
 
         if (type === 'font') {
@@ -2300,10 +2302,8 @@ class PagerApp {
       chip.type = 'button';
       chip.className = 'quick-preset-chip';
       chip.dataset.color = p.hex;
-      chip.innerHTML = `
-        <span class="preset-color-dot" style="background:${p.hex};"></span>
-        <span class="preset-name">${p.name}</span>
-      `;
+      chip.style.backgroundColor = p.hex;
+      chip.title = `${p.name} (${p.hex})`;
       if (p.hex.toUpperCase() === this.currentColorHex) {
         chip.classList.add('active');
       }
