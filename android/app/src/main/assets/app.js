@@ -1113,19 +1113,19 @@ class PagerApp {
     this.clearTimers();
     this.playBeepSound();
 
-    const stageNum = this.currentStageIdx + 1;
-    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // 지령 수신 중...`;
+    this.dom.displaySubLabel.textContent = "지령 수신 중...";
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayMain.className = 'main-text dimmed';
 
-    let dots = 0;
+    let dotStep = 0;
     this.dom.displayDots.textContent = "";
     this.animInterval = setInterval(() => {
-      dots = (dots + 1) % 5;
-      this.dom.displayDots.textContent = "•".repeat(dots);
+      dotStep = (dotStep + 1) % 4;
+      const dots = "• ".repeat(dotStep) + "◦ ".repeat(3 - dotStep);
+      this.dom.displayDots.textContent = dots;
       this.dom.displayMain.textContent = this.getRandomCipher(12);
-    }, 150);
+    }, 100);
 
     const minDur = (this.config.decode_speed === 'fast') ? 800 : (this.config.decode_speed === 'slow') ? 1800 : 1200;
     const minWaitPromise = new Promise(resolve => setTimeout(resolve, minDur));
@@ -1141,8 +1141,7 @@ class PagerApp {
         if (this.state !== STATE.BEEPING) return;
         this.clearTimers();
         this.dom.displayDots.textContent = "";
-        const curStage = this.currentStageIdx + 1;
-        this.dom.displaySubLabel.textContent = `STAGE ${curStage} // 지령 수신 실패`;
+        this.dom.displaySubLabel.textContent = "지령 수신 실패";
         this.dom.displayMain.textContent = "통신 에러 // 터치하여 재시도";
         this.dom.displayMain.className = 'main-text amber';
         this.state = STATE.IDLE;
@@ -1151,44 +1150,52 @@ class PagerApp {
   }
 
   startAiDecoding(targetText) {
-    this.state = STATE.DECODING;
     this.clearTimers();
+    this.state = STATE.DECODING;
 
-    const stageNum = this.currentStageIdx + 1;
-    this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // DECRYPTING...`;
+    this.dom.displayDots.textContent = "• • •";
+    this.dom.displaySubLabel.textContent = "▼ 지령 복호화 진행 중... ▼";
     this.dom.progressBar.classList.add('visible');
     this.dom.displayTime.classList.remove('visible');
 
-    const totalSteps = (this.config.decode_speed === 'fast') ? 8 : (this.config.decode_speed === 'slow') ? 18 : 12;
+    const durations = { fast: 500, normal: 900, slow: 1500 };
+    const totalTime = durations[this.config.decode_speed] || 900;
+    const steps = 18;
+    const stepTime = totalTime / steps;
     let currentStep = 0;
 
     this.animInterval = setInterval(() => {
       currentStep++;
-      const progress = currentStep / totalSteps;
-      const revealedLength = Math.floor(targetText.length * progress);
-      const revealedPart = targetText.slice(0, revealedLength);
-      const cipherPart = this.getRandomCipher(Math.max(0, targetText.length - revealedLength));
-
-      this.dom.displayMain.textContent = revealedPart + cipherPart;
-      this.dom.displayMain.className = (progress > 0.6) ? 'main-text accent' : 'main-text dimmed';
+      const progress = Math.min(1.0, currentStep / steps);
       this.dom.progressFill.style.width = `${progress * 100}%`;
 
-      if (currentStep >= totalSteps) {
-        clearInterval(this.animInterval);
+      const revealedCount = Math.floor(targetText.length * progress);
+      let frame = "";
+      for (let i = 0; i < targetText.length; i++) {
+        if (i < revealedCount) {
+          frame += targetText[i];
+        } else {
+          frame += (targetText[i] === ' ') ? ' ' : CIPHER_CHARS[Math.floor(Math.random() * CIPHER_CHARS.length)];
+        }
+      }
+
+      this.dom.displayMain.textContent = frame;
+      this.dom.displayMain.className = (progress > 0.6) ? 'main-text accent' : 'main-text dimmed';
+
+      if (currentStep >= steps) {
+        this.clearTimers();
         this.startAiRevealed(targetText);
       }
-    }, (this.config.decode_speed === 'fast') ? 40 : (this.config.decode_speed === 'slow') ? 90 : 60);
+    }, stepTime);
   }
 
   startAiRevealed(targetText) {
-    this.state = STATE.REVEALED;
     this.clearTimers();
+    this.state = STATE.REVEALED;
 
-    const stageNum = this.currentStageIdx + 1;
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // 지령 수신 완료`;
+    this.dom.displaySubLabel.textContent = "";
     this.dom.displayMain.textContent = targetText;
     this.dom.displayMain.className = 'main-text accent';
     this.dom.displayTime.classList.remove('visible');
@@ -1200,25 +1207,24 @@ class PagerApp {
     this.clearTimers();
     this.playBeepSound();
 
-    const stage = this.getCurrentStage();
-    const stageNum = stage ? stage.stage : 1;
     const msg = this.getCurrentMessage();
-    const targetText = msg ? msg.text : "NO DATA";
+    const cipherLen = msg ? Math.max(9, msg.text.length) : 11;
 
-    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // BEEPING...`;
+    this.dom.displaySubLabel.textContent = "신호 수신 중...";
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayMain.className = 'main-text dimmed';
 
-    let dots = 0;
+    let dotStep = 0;
     this.dom.displayDots.textContent = "";
     this.animInterval = setInterval(() => {
-      dots = (dots + 1) % 5;
-      this.dom.displayDots.textContent = "•".repeat(dots);
-      this.dom.displayMain.textContent = this.getRandomCipher(Math.min(targetText.length, 12));
-    }, 150);
+      dotStep = (dotStep + 1) % 4;
+      const dots = "• ".repeat(dotStep) + "◦ ".repeat(3 - dotStep);
+      this.dom.displayDots.textContent = dots;
+      this.dom.displayMain.textContent = this.getRandomCipher(cipherLen);
+    }, 100);
 
-    const beepDur = (this.config.decode_speed === 'fast') ? 1000 : (this.config.decode_speed === 'slow') ? 2200 : 1600;
+    const beepDur = (this.config.decode_speed === 'fast') ? 600 : (this.config.decode_speed === 'slow') ? 1800 : 1100;
     this.beepTimeout = setTimeout(() => {
       this.startDecoding();
     }, beepDur);
@@ -1226,56 +1232,67 @@ class PagerApp {
 
   // ── 수동 모드 상태 2: DECODING ──
   startDecoding() {
-    this.state = STATE.DECODING;
     this.clearTimers();
+    this.state = STATE.DECODING;
 
-    const stage = this.getCurrentStage();
-    const stageNum = stage ? stage.stage : 1;
     const msg = this.getCurrentMessage();
-    const targetText = msg ? msg.text : "NO DATA";
+    if (!msg) {
+      this.startIdle();
+      return;
+    }
 
-    this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // DECRYPTING...`;
+    const targetText = msg.text;
+    this.dom.displayDots.textContent = "• • •";
+    this.dom.displaySubLabel.textContent = "▼ 데이터 복호화 진행 중... ▼";
     this.dom.progressBar.classList.add('visible');
     this.dom.displayTime.classList.remove('visible');
 
-    const totalSteps = (this.config.decode_speed === 'fast') ? 8 : (this.config.decode_speed === 'slow') ? 20 : 14;
+    const durations = { fast: 500, normal: 900, slow: 1500 };
+    const totalTime = durations[this.config.decode_speed] || 900;
+    const steps = 18;
+    const stepTime = totalTime / steps;
     let currentStep = 0;
 
     this.animInterval = setInterval(() => {
       currentStep++;
-      const progress = currentStep / totalSteps;
-      const revealedLength = Math.floor(targetText.length * progress);
-      const revealedPart = targetText.slice(0, revealedLength);
-      const cipherPart = this.getRandomCipher(targetText.length - revealedLength);
-
-      this.dom.displayMain.textContent = revealedPart + cipherPart;
-      this.dom.displayMain.className = (progress > 0.6) ? 'main-text accent' : 'main-text dimmed';
+      const progress = Math.min(1.0, currentStep / steps);
       this.dom.progressFill.style.width = `${progress * 100}%`;
 
-      if (currentStep >= totalSteps) {
-        clearInterval(this.animInterval);
+      const revealedCount = Math.floor(targetText.length * progress);
+      let frame = "";
+      for (let i = 0; i < targetText.length; i++) {
+        if (i < revealedCount) {
+          frame += targetText[i];
+        } else {
+          frame += (targetText[i] === ' ') ? ' ' : CIPHER_CHARS[Math.floor(Math.random() * CIPHER_CHARS.length)];
+        }
+      }
+
+      this.dom.displayMain.textContent = frame;
+      this.dom.displayMain.className = (progress > 0.6) ? 'main-text accent' : 'main-text dimmed';
+
+      if (currentStep >= steps) {
+        this.clearTimers();
         this.startRevealed();
       }
-    }, (this.config.decode_speed === 'fast') ? 40 : (this.config.decode_speed === 'slow') ? 90 : 60);
+    }, stepTime);
   }
 
   // ── 수동 모드 상태 3: REVEALED ──
   startRevealed() {
-    this.state = STATE.REVEALED;
     this.clearTimers();
+    this.state = STATE.REVEALED;
 
-    const stage = this.getCurrentStage();
-    const stageNum = stage ? stage.stage : 1;
     const msg = this.getCurrentMessage();
+    if (!msg) return;
 
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // MESSAGE ${this.currentMsgIdx + 1}/${stage ? stage.messages.length : 1}`;
-    this.dom.displayMain.textContent = msg ? msg.text : "NO DATA";
+    this.dom.displaySubLabel.textContent = "";
+    this.dom.displayMain.textContent = msg.text;
     this.dom.displayMain.className = 'main-text accent';
 
-    if (msg && msg.time_info) {
+    if (msg.time_info) {
       this.dom.displayTime.textContent = msg.time_info;
       this.dom.displayTime.classList.add('visible');
     } else {
@@ -1285,27 +1302,26 @@ class PagerApp {
 
   // ── 수동 모드 상태 4: CLEAR ──
   startClear() {
-    this.state = STATE.CLEAR;
     this.clearTimers();
+    this.state = STATE.CLEAR;
 
-    const stageNum = this.currentStageIdx + 1;
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // COMPLETE`;
+    this.dom.displaySubLabel.textContent = "";
     this.dom.displayMain.textContent = "_CLEAR._";
     this.dom.displayMain.className = 'main-text amber';
   }
 
   // ── 수동 모드 상태 5: COMPLETE ──
   startComplete() {
-    this.state = STATE.COMPLETE;
     this.clearTimers();
+    this.state = STATE.COMPLETE;
 
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "ALL SCHEDULES COMPLETED";
+    this.dom.displaySubLabel.textContent = "";
     this.dom.displayMain.textContent = "_ALL_CLEAR._";
     this.dom.displayMain.className = 'main-text amber';
   }
@@ -1313,17 +1329,8 @@ class PagerApp {
   updateDisplay() {
     if (this.state === STATE.IDLE) {
       this.dom.displayDots.textContent = "";
-      const stageNum = this.currentStageIdx + 1;
-      if (this.isCalendarActive()) {
-        this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // CALENDAR SYNC`;
-        this.dom.displayMain.textContent = "SPACE 또는 터치하여 시작";
-      } else if (this.config.directive_mode === 'ai') {
-        this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // DIRECTIVE READY`;
-        this.dom.displayMain.textContent = "SPACE 또는 터치하여 지령 수신";
-      } else {
-        this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // READY`;
-        this.dom.displayMain.textContent = "SPACE 또는 터치하여 시작";
-      }
+      this.dom.displaySubLabel.textContent = "";
+      this.dom.displayMain.textContent = "SPACE 를 눌러 시작";
       this.dom.displayMain.className = 'main-text';
       this.dom.displayTime.classList.remove('visible');
       this.dom.progressBar.classList.remove('visible');
