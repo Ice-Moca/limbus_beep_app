@@ -1115,21 +1115,31 @@ class PagerApp {
     this.clearTimers();
     this.playBeepSound();
 
-    this.dom.displaySubLabel.textContent = "지령 수신 중...";
+    this.dom.displaySubLabel.textContent = "";
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
-    this.dom.displayMain.className = 'main-text dimmed';
+    this.dom.displayMain.className = 'main-text loading';
 
     let dotStep = 0;
-    this.dom.displayDots.textContent = "";
+    let textStep = 0;
+    const loadingFrames = [
+      "지령 수신 중",
+      "지령 수신 중.",
+      "지령 수신 중..",
+      "지령 수신 중..."
+    ];
+    this.dom.displayMain.textContent = "지령 수신 중...";
+
     this.animInterval = setInterval(() => {
       dotStep = (dotStep + 1) % 4;
       const dots = "• ".repeat(dotStep) + "◦ ".repeat(3 - dotStep);
       this.dom.displayDots.textContent = dots;
-      this.dom.displayMain.textContent = this.getRandomCipher(12);
-    }, 100);
 
-    const minDur = (this.config.decode_speed === 'fast') ? 800 : (this.config.decode_speed === 'slow') ? 1800 : 1200;
+      textStep = (textStep + 1) % loadingFrames.length;
+      this.dom.displayMain.textContent = loadingFrames[textStep];
+    }, 250);
+
+    const minDur = (this.config.decode_speed === 'fast') ? 600 : (this.config.decode_speed === 'slow') ? 1600 : 1000;
     const minWaitPromise = new Promise(resolve => setTimeout(resolve, minDur));
     const fetchPromise = this.generateGeminiMessage(this.config.gemini_hint);
 
@@ -1643,8 +1653,25 @@ class PagerApp {
     };
   }
 
-  // ── 범용 HTTP 통신 헬퍼 (Android Native Bridge 우선, fetch 폴백) ──
+  // ── 범용 HTTP 통신 헬퍼 (비동기 fetch 우선으로 JS 스레드 블로킹 방지, 필요시 Android Bridge 폴백) ──
   async nativeOrFetch(url, method = 'GET', body = null) {
+    const opts = {
+      method: method,
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    };
+    if (body && method !== 'GET') {
+      opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+    }
+
+    // 1. 표준 비동기 fetch 우선 (UI 및 로딩 애니메이션의 끊김 없는 부드러운 실행 보장)
+    try {
+      const resp = await fetch(url, opts);
+      return resp;
+    } catch (fetchErr) {
+      console.warn("fetch 호출 실패, AndroidBridge 폴백 시도:", fetchErr);
+    }
+
+    // 2. fetch 실패 시 Android Native Bridge 폴백
     if (window.AndroidBridge) {
       try {
         if (method === 'POST' && typeof window.AndroidBridge.httpPost === 'function') {
@@ -1672,19 +1699,11 @@ class PagerApp {
           }
         }
       } catch (e) {
-        console.warn("AndroidBridge HTTP 실패, fetch로 전환:", e);
+        console.warn("AndroidBridge 폴백 실패:", e);
       }
     }
 
-    // 표준 브라우저 fetch
-    const opts = {
-      method: method,
-      headers: { 'Content-Type': 'application/json' }
-    };
-    if (body && method !== 'GET') {
-      opts.body = typeof body === 'string' ? body : JSON.stringify(body);
-    }
-    return await fetch(url, opts);
+    throw new Error("네트워크 요청 실패 (fetch 및 네이티브 브릿지 오류)");
   }
 
   async fetchAvailableModels(apiKey) {

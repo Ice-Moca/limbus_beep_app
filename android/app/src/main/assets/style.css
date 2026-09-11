@@ -289,6 +289,18 @@ html, body {
   text-shadow: 0 0 20px rgba(255, 152, 0, 0.6);
 }
 
+.main-text.loading {
+  color: var(--cyan-primary);
+  opacity: 0.9;
+  text-shadow: 0 0 14px var(--cyan-glow);
+  animation: cyber-loading-blink 1.4s infinite ease-in-out;
+}
+
+@keyframes cyber-loading-blink {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 .time-badge {
   display: inline-block;
   margin-top: 16px;
