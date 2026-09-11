@@ -7,86 +7,43 @@ const STATE = {
   IDLE: 'IDLE',
   BEEPING: 'BEEPING',
   DECODING: 'DECODING',
-  REVEALED: 'REVEALED',
-  CLEAR: 'CLEAR',
-  COMPLETE: 'COMPLETE'
+  REVEALED: 'REVEALED'
 };
 
 const CIPHER_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*+-=?<>";
 
-// ── 기본 설정 및 초기 메시지 ──
+// ── 기본 설정 ──
 const DEFAULT_CONFIG = {
   volume: 80,
   orientation: 'landscape', // landscape | portrait | sensor (가로 모드 기본)
-  ics_url: '',
-  auto_sync_min: 60,
+  gemini_api_key: '',
+  gemini_hint: '',
+  gemini_model: 'gemini-2.5-flash',
   decode_speed: 'normal',   // fast: 0.5s, normal: 0.9s, slow: 1.5s
   sound_type: 'file',       // file | synth
   font_color: '#2fbffc',    // 단테 블루 기본
   bg_color: '#000000',      // 딥 블랙 기본
   scanlines: true,
   vignette: true,
-  alarm_enabled: true, // 등록된 시간에 알람 울리기 (기본 활성화)
 };
-
-const DEFAULT_MESSAGES = [
-  {
-    stage: 1,
-    messages: [
-      { text: "관리자님, 오늘의 일정을 확인하십시오.", time_info: "09:00 - 10:00" },
-      { text: "설정에서 구글 캘린더 iCal을 연동할 수 있습니다.", time_info: "11:00 - 12:00" }
-    ]
-  },
-  {
-    stage: 2,
-    messages: [
-      { text: "수감자들의 상태를 점검할 시간입니다.", time_info: "14:00 - 15:30" },
-      { text: "황금가지를 향한 여정을 계속하십시오.", time_info: "16:00 - 18:00" }
-    ]
-  },
-  {
-    stage: 3,
-    messages: [
-      { text: "오늘 하루도 수고하셨습니다.", time_info: "20:00 - 21:00" }
-    ]
-  }
-];
 
 class PagerApp {
   constructor() {
     this.state = STATE.IDLE;
-    this.currentStageIdx = 0;
-    this.currentMsgIdx = 0;
-    
+    this.pendingMessageText = ''; // 이번 사이클에서 Gemini가 생성한 지령 텍스트
+
     this.config = this.loadConfig();
-    this.messages = this.loadStoredMessages();
-    this.customStages = JSON.parse(JSON.stringify(this.messages));
-    
+
     this.animInterval = null;
     this.beepTimeout = null;
     this.audioCtx = null;
-    this.todayKey = this.getTodayKey();
-    this.firedAlarms = this.loadFiredAlarms(this.todayKey);
-    this.pendingAlarmTarget = null;
-    
+
     this.initDOM();
     this.initCustomColorPicker();
     this.bindEvents();
     this.applySettings();
     this.startClock();
     this.updateDisplay();
-    this.startAlarmWatcher();
-    this.scheduleAlarms();
-
-    // 초기 자동 동기화
-    if (this.config.ics_url && this.config.auto_sync_min > 0) {
-      setTimeout(() => this.syncCalendar(this.config.ics_url, true), 3000);
-      setInterval(() => {
-        if (this.config.ics_url && this.config.auto_sync_min > 0) {
-          this.syncCalendar(this.config.ics_url, true);
-        }
-      }, this.config.auto_sync_min * 60 * 1000);
-    }
   }
 
   // ── DOM 캐싱 ──
@@ -100,15 +57,6 @@ class PagerApp {
       progressBar: document.getElementById('progress-container'),
       progressFill: document.getElementById('progress-fill'),
       clock: document.getElementById('clock-display'),
-      hintText: document.getElementById('hint-text'),
-
-      // 인앱 알람 배너
-      alarmBanner: document.getElementById('alarm-banner'),
-      alarmTimeText: document.getElementById('alarm-time-text'),
-      alarmDescText: document.getElementById('alarm-desc-text'),
-      btnAlarmJump: document.getElementById('btn-alarm-jump'),
-      btnAlarmDismiss: document.getElementById('btn-alarm-dismiss'),
-      
       // 모달 & 폼 컨트롤
       modal: document.getElementById('settings-modal'),
       btnOpenSettings: document.getElementById('btn-open-settings'),
@@ -116,28 +64,21 @@ class PagerApp {
       btnCancelSettings: document.getElementById('btn-cancel-settings'),
       btnSaveSettings: document.getElementById('btn-save-settings'),
       btnResetDefault: document.getElementById('btn-reset-default'),
-      btnSyncNow: document.getElementById('btn-sync-now'),
       btnTestSound: document.getElementById('btn-test-sound'),
-      
-      // 메시지 & STAGE 조절기
-      btnAddStage: document.getElementById('btn-add-stage'),
-      btnLoadSample: document.getElementById('btn-load-sample'),
-      btnClearMessages: document.getElementById('btn-clear-messages'),
-      btnApplyCustom: document.getElementById('btn-apply-custom-messages'),
-      labelCustomStageCount: document.getElementById('label-custom-stage-count'),
-      stageCardsContainer: document.getElementById('stage-cards-container'),
-      
+
+      // Gemini API 설정 (실시간 지령 생성용)
+      inputGeminiKey: document.getElementById('input-gemini-key'),
+      inputGeminiHint: document.getElementById('input-gemini-hint'),
+      selectGeminiModel: document.getElementById('select-gemini-model'),
+
       // 설정 필드
       selectOrientation: document.getElementById('select-orientation'),
-      inputIcsUrl: document.getElementById('input-ics-url'),
-      selectAutoSync: document.getElementById('select-auto-sync'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
       selectSoundType: document.getElementById('select-sound-type'),
       sliderVolume: document.getElementById('slider-volume'),
       labelVolume: document.getElementById('label-volume'),
       toggleScanlines: document.getElementById('toggle-scanlines'),
       toggleVignette: document.getElementById('toggle-vignette'),
-      toggleAlarm: document.getElementById('toggle-alarm'),
 
       // 커스텀 사이버 컬러 모달
       colorModal: document.getElementById('custom-color-modal'),
@@ -171,30 +112,11 @@ class PagerApp {
   bindEvents() {
     // 1. 화면 클릭 / 터치로 다음 단계 진행
     this.dom.app.addEventListener('click', (e) => {
-      if (e.target.closest('#btn-open-settings') || e.target.closest('#alarm-banner') || !this.dom.modal.classList.contains('hidden')) {
+      if (e.target.closest('#btn-open-settings') || !this.dom.modal.classList.contains('hidden')) {
         return;
       }
       this.advance();
     });
-
-    // 1-1. 인앱 알람 배너 액션 버튼
-    if (this.dom.btnAlarmJump) {
-      this.dom.btnAlarmJump.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this.pendingAlarmTarget) {
-          this.jumpToMessage(this.pendingAlarmTarget.stageIdx, this.pendingAlarmTarget.msgIdx);
-        } else {
-          this.dismissAlarmBanner();
-        }
-      });
-    }
-
-    if (this.dom.btnAlarmDismiss) {
-      this.dom.btnAlarmDismiss.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.dismissAlarmBanner();
-      });
-    }
 
     // 2. 키보드 단축키
     window.addEventListener('keydown', (e) => {
@@ -233,18 +155,6 @@ class PagerApp {
         btn.classList.add('active');
         document.getElementById(btn.dataset.tab).classList.add('active');
       });
-    });
-
-    // 5. STAGE 동적 추가
-    this.dom.btnAddStage.addEventListener('click', () => {
-      this.syncCustomBufferFromDOM();
-      const newStageNum = this.customStages.length + 1;
-      this.customStages.push({
-        stage: newStageNum,
-        messages: [{ text: `새 일정 메시지`, time_info: "" }]
-      });
-      this.renderCustomStageCards();
-      this.showToast(`단계 ${newStageNum} 추가됨`);
     });
 
     // 6. 볼륨 슬라이더 및 사운드 설정
@@ -320,47 +230,51 @@ class PagerApp {
       });
     }
 
-    // 일정 알람 토글 자동 저장
-    if (this.dom.toggleAlarm) {
-      this.dom.toggleAlarm.addEventListener('change', (e) => {
-        this.saveConfig({ alarm_enabled: e.target.checked });
-        this.showToast(e.target.checked ? "일정 알람이 활성화되었습니다." : "일정 알람이 비활성화되었습니다.");
-      });
-    }
-
-    // 자동 동기화 주기 및 디코드 속도 자동 저장
-    this.dom.selectAutoSync.addEventListener('change', (e) => {
-      this.saveConfig({ auto_sync_min: parseInt(e.target.value, 10) });
-    });
+    // 디코드 속도 자동 저장
     this.dom.selectDecodeSpeed.addEventListener('change', (e) => {
       this.saveConfig({ decode_speed: e.target.value });
     });
 
+    // Gemini API 설정 실시간 반응 및 모델 자동 탐색
+    if (this.dom.inputGeminiKey) {
+      this.dom.inputGeminiKey.addEventListener('change', (e) => {
+        const key = e.target.value.trim();
+        this.saveConfig({ gemini_api_key: key });
+        if (key.length > 10) {
+          this.fetchAvailableModels(key);
+        }
+      });
+
+      let keyDebounceTimer = null;
+      this.dom.inputGeminiKey.addEventListener('input', (e) => {
+        clearTimeout(keyDebounceTimer);
+        const key = e.target.value.trim();
+        if (key.length > 15) {
+          keyDebounceTimer = setTimeout(() => {
+            this.saveConfig({ gemini_api_key: key });
+            this.fetchAvailableModels(key);
+          }, 600);
+        }
+      });
+    }
+
+    if (this.dom.inputGeminiHint) {
+      this.dom.inputGeminiHint.addEventListener('change', (e) => {
+        this.saveConfig({ gemini_hint: e.target.value.trim() });
+      });
+    }
+
+    if (this.dom.selectGeminiModel) {
+      this.dom.selectGeminiModel.addEventListener('change', (e) => {
+        this.config.gemini_model = e.target.value;
+        this.saveConfig({ gemini_model: e.target.value });
+        this.showToast(`모델 설정 완료: ${e.target.value}`);
+      });
+    }
+
     // 11. 설정 저장 및 기본값 복원
     this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
     this.dom.btnResetDefault.addEventListener('click', () => this.resetDefaults());
-
-    // 12. 캘린더 URL 즉시 동기화
-    this.dom.btnSyncNow.addEventListener('click', () => {
-      const url = this.dom.inputIcsUrl.value.trim();
-      this.syncCalendar(url);
-    });
-
-    // 13. 메시지 에디터 툴바
-    this.dom.btnLoadSample.addEventListener('click', () => {
-      this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
-      this.renderCustomStageCards();
-      this.showToast("기본 예시 메시지가 로드되었습니다.");
-    });
-
-    this.dom.btnClearMessages.addEventListener('click', () => {
-      this.customStages = [{ stage: 1, messages: [{ text: "새 메시지", time_info: "" }] }];
-      this.renderCustomStageCards();
-      this.showToast("메시지 입력란을 초기화했습니다.");
-    });
-
-    // 14. 작성된 STAGE 삐삐 적용
-    this.dom.btnApplyCustom.addEventListener('click', () => this.applyCustomStages());
   }
 
   // ── 설정 로드 및 저장 ──
@@ -377,26 +291,6 @@ class PagerApp {
     this.config = { ...this.config, ...newConfig };
     localStorage.setItem('limbus_beep_config', JSON.stringify(this.config));
     this.applySettings();
-  }
-
-  loadStoredMessages() {
-    try {
-      const stored = localStorage.getItem('limbus_beep_messages');
-      return stored ? JSON.parse(stored) : DEFAULT_MESSAGES;
-    } catch {
-      return DEFAULT_MESSAGES;
-    }
-  }
-
-  saveStoredMessages(messages) {
-    this.messages = messages;
-    this.customStages = JSON.parse(JSON.stringify(messages));
-    localStorage.setItem('limbus_beep_messages', JSON.stringify(messages));
-    this.currentStageIdx = 0;
-    this.currentMsgIdx = 0;
-    this.updateDisplay();
-    this.renderCustomStageCards();
-    this.scheduleAlarms();
   }
 
   applyCustomColors(fontColor, bgColor) {
@@ -491,181 +385,6 @@ class PagerApp {
     }
     this.applyCustomColors(this.config.font_color, this.config.bg_color);
     this.applyOrientation(this.config.orientation || 'landscape');
-    this.scheduleAlarms();
-  }
-
-  // ── 일정 알람 스케줄링 & 감시 엔진 ──
-  getTodayKey() {
-    const now = new Date();
-    return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-  }
-
-  loadFiredAlarms(todayKey) {
-    try {
-      const stored = localStorage.getItem(`limbus_fired_alarms_${todayKey}`);
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
-      return new Set();
-    }
-  }
-
-  saveFiredAlarms(todayKey) {
-    try {
-      localStorage.setItem(`limbus_fired_alarms_${todayKey}`, JSON.stringify(Array.from(this.firedAlarms)));
-    } catch {}
-  }
-
-  scheduleAlarms() {
-    const isEnabled = this.config.alarm_enabled !== false;
-    if (!isEnabled) {
-      if (window.AndroidBridge && typeof window.AndroidBridge.cancelAllAlarms === 'function') {
-        window.AndroidBridge.cancelAllAlarms();
-      }
-      return;
-    }
-
-    const now = new Date();
-    const alarmsList = [];
-
-    this.messages.forEach((stage, sIdx) => {
-      if (!stage.messages) return;
-      stage.messages.forEach((msg, mIdx) => {
-        const match = (msg.time_info || '').match(/\b(\d{1,2}):(\d{2})\b/);
-        if (!match) return;
-
-        const hours = parseInt(match[1], 10);
-        const minutes = parseInt(match[2], 10);
-        const triggerDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
-
-        if (triggerDate.getTime() > now.getTime()) {
-          alarmsList.push({
-            id: alarmsList.length + 1,
-            title: "단테 삐삐 일정 알람",
-            message: msg.text,
-            time: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
-            triggerAtMillis: triggerDate.getTime()
-          });
-        }
-      });
-    });
-
-    // Android Native 알림 권한 및 AlarmManager 동기화
-    if (window.AndroidBridge) {
-      try {
-        if (typeof window.AndroidBridge.requestNotificationPermission === 'function') {
-          window.AndroidBridge.requestNotificationPermission();
-        }
-        if (typeof window.AndroidBridge.syncAlarms === 'function') {
-          window.AndroidBridge.syncAlarms(JSON.stringify(alarmsList));
-        }
-      } catch (e) {
-        console.warn("AndroidBridge alarm sync error:", e);
-      }
-    }
-
-    // 웹 브라우저 Notification 권한 사전 요청
-    try {
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
-      }
-    } catch (e) {}
-  }
-
-  startAlarmWatcher() {
-    setInterval(() => {
-      this.checkAlarms();
-    }, 1000);
-  }
-
-  checkAlarms() {
-    if (this.config.alarm_enabled === false) return;
-
-    const now = new Date();
-    const curH = now.getHours();
-    const curM = now.getMinutes();
-    const curTimeStr = `${String(curH).padStart(2, '0')}:${String(curM).padStart(2, '0')}`;
-    const todayKey = this.getTodayKey();
-
-    // 날짜가 바뀌었을 경우 firedAlarms 새로고침
-    if (this.todayKey !== todayKey) {
-      this.todayKey = todayKey;
-      this.firedAlarms = this.loadFiredAlarms(todayKey);
-    }
-
-    this.messages.forEach((stage, sIdx) => {
-      if (!stage.messages) return;
-      stage.messages.forEach((msg, mIdx) => {
-        const match = (msg.time_info || '').match(/\b(\d{1,2}):(\d{2})\b/);
-        if (!match) return;
-
-        const msgH = parseInt(match[1], 10);
-        const msgM = parseInt(match[2], 10);
-        const msgTimeStr = `${String(msgH).padStart(2, '0')}:${String(msgM).padStart(2, '0')}`;
-
-        if (msgTimeStr === curTimeStr) {
-          const alarmKey = `${todayKey}_${msgTimeStr}_${msg.text}`;
-          if (!this.firedAlarms.has(alarmKey)) {
-            this.firedAlarms.add(alarmKey);
-            this.saveFiredAlarms(todayKey);
-            this.triggerInAppAlarm(msg, sIdx, mIdx, msgTimeStr);
-          }
-        }
-      });
-    });
-  }
-
-  triggerInAppAlarm(msg, sIdx, mIdx, timeStr) {
-    // 1. 단테 비프음 3회 연속 재생 (인앱 알람 시퀀스)
-    this.playBeep();
-    setTimeout(() => this.playBeep(), 250);
-    setTimeout(() => this.playBeep(), 500);
-
-    // 2. 디바이스 진동
-    if (navigator.vibrate) {
-      navigator.vibrate([350, 150, 350, 150, 600]);
-    }
-    if (window.AndroidBridge && typeof window.AndroidBridge.vibrate === 'function') {
-      window.AndroidBridge.vibrate(800);
-    }
-
-    // 3. 상단 인앱 알람 배너 노출
-    if (this.dom.alarmBanner) {
-      if (this.dom.alarmTimeText) this.dom.alarmTimeText.textContent = timeStr;
-      if (this.dom.alarmDescText) this.dom.alarmDescText.textContent = msg.text;
-      this.dom.alarmBanner.classList.remove('hidden');
-      this.pendingAlarmTarget = { stageIdx: sIdx, msgIdx: mIdx };
-    }
-
-    // 4. 웹 브라우저 환경에서만 Notification (안드로이드 네이티브 앱은 AlarmManager가 담당하여 중복 방지)
-    if (!window.AndroidBridge && 'Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(`단테 삐삐 알람 [${timeStr}]`, {
-          body: msg.text,
-          icon: 'assets/icon-192.png',
-          tag: `limbus-alarm-${timeStr}`
-        });
-      } catch (e) {}
-    }
-  }
-
-  dismissAlarmBanner() {
-    if (this.dom.alarmBanner) {
-      this.dom.alarmBanner.classList.add('hidden');
-    }
-    this.pendingAlarmTarget = null;
-  }
-
-  jumpToMessage(stageIdx, msgIdx) {
-    this.dismissAlarmBanner();
-    if (stageIdx >= 0 && stageIdx < this.messages.length) {
-      this.currentStageIdx = stageIdx;
-      if (msgIdx >= 0 && msgIdx < this.messages[stageIdx].messages.length) {
-        this.currentMsgIdx = msgIdx;
-      } else {
-        this.currentMsgIdx = 0;
-      }
-      this.startBeeping();
-    }
   }
 
   // ── 오디오 재생 ──
@@ -725,21 +444,6 @@ class PagerApp {
     return str;
   }
 
-  getCurrentStage() {
-    return this.messages[this.currentStageIdx] || null;
-  }
-
-  getCurrentMessage() {
-    const stage = this.getCurrentStage();
-    if (!stage || !stage.messages) return null;
-    const msg = stage.messages[this.currentMsgIdx] || null;
-    if (!msg) return null;
-    return {
-      ...msg,
-      text: this.truncateText(msg.text, 30)
-    };
-  }
-
   getRandomCipher(len = 10) {
     let res = "";
     for (let i = 0; i < len; i++) {
@@ -749,41 +453,29 @@ class PagerApp {
   }
 
   // ── 상태 머신 컨트롤 ──
+  // 터치할 때마다: IDLE → (Gemini 호출) BEEPING → DECODING → REVEALED → (다시 터치) BEEPING(새 지령) → ...
   advance() {
-    this.clearTimers();
-
     if (this.state === STATE.IDLE) {
-      this.currentMsgIdx = 0;
+      if (!this.config.gemini_api_key || !this.config.gemini_api_key.trim()) {
+        this.showToast("설정에서 Gemini API 키를 먼저 입력해주세요.");
+        this.openModal();
+        return;
+      }
+      this.clearTimers();
       this.startBeeping();
     } else if (this.state === STATE.BEEPING) {
-      this.startDecoding();
+      // AI 응답 대기 중에는 중복 호출을 막기 위해 터치를 무시한다.
     } else if (this.state === STATE.DECODING) {
+      this.clearTimers();
       this.startRevealed();
     } else if (this.state === STATE.REVEALED) {
-      const stage = this.getCurrentStage();
-      if (stage && this.currentMsgIdx + 1 < stage.messages.length) {
-        this.currentMsgIdx++;
-        this.startBeeping();
-      } else {
-        const isLastStage = (this.currentStageIdx + 1 >= this.messages.length);
-        if (isLastStage) {
-          this.startComplete();
-        } else {
-          this.startClear();
-        }
-      }
-    } else if (this.state === STATE.CLEAR) {
-      this.currentStageIdx++;
-      this.currentMsgIdx = 0;
+      this.clearTimers();
       this.startBeeping();
-    } else if (this.state === STATE.COMPLETE) {
-      this.currentStageIdx = 0;
-      this.currentMsgIdx = 0;
-      this.updateDisplayIdle();
     }
   }
 
   replay() {
+    if (this.state === STATE.BEEPING) return;
     this.clearTimers();
     this.startBeeping();
   }
@@ -795,7 +487,7 @@ class PagerApp {
     this.beepTimeout = null;
   }
 
-  // ── 상태 1: BEEPING ──
+  // ── 상태 1: BEEPING (동시에 Gemini API로 새 지령을 실시간 생성) ──
   startBeeping() {
     this.state = STATE.BEEPING;
     this.playBeep();
@@ -803,22 +495,44 @@ class PagerApp {
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayTime.classList.remove('visible');
     this.dom.displayMain.className = 'main-text dimmed';
-    this.dom.displaySubLabel.textContent = "신호 수신 중...";
+    this.dom.displaySubLabel.textContent = "지령 수신 중...";
 
-    const msg = this.getCurrentMessage();
-    const cipherLen = msg ? Math.max(9, msg.text.length) : 11;
     let dotStep = 0;
-
     this.animInterval = setInterval(() => {
       dotStep = (dotStep + 1) % 4;
       const dots = "• ".repeat(dotStep) + "◦ ".repeat(3 - dotStep);
       this.dom.displayDots.textContent = dots;
-      this.dom.displayMain.textContent = this.getRandomCipher(cipherLen);
+      this.dom.displayMain.textContent = this.getRandomCipher(11);
     }, 100);
 
-    this.beepTimeout = setTimeout(() => {
+    // 최소 대기 시간(비프 연출)과 Gemini 응답을 동시에 기다린 뒤 디코딩으로 넘어간다.
+    const minWait = new Promise((resolve) => {
+      this.beepTimeout = setTimeout(resolve, 1100);
+    });
+    const fetchPromise = this.generateGeminiMessage(this.config.gemini_hint);
+
+    Promise.all([minWait, fetchPromise]).then(([, text]) => {
+      if (this.state !== STATE.BEEPING) return; // 대기 중 사용자가 다른 조작을 했으면 무시
+      this.pendingMessageText = text;
       this.startDecoding();
-    }, 1100);
+    }).catch((err) => {
+      if (this.state !== STATE.BEEPING) return;
+      console.error("AI 지령 생성 실패:", err);
+      this.showGenerationError(err && err.message ? err.message : "AI 지령을 받아오지 못했습니다.");
+    });
+  }
+
+  // Gemini 호출 실패 시 화면에 에러를 표시하고 IDLE로 되돌린다.
+  showGenerationError(message) {
+    this.clearTimers();
+    this.state = STATE.IDLE;
+    this.dom.displayDots.textContent = "";
+    this.dom.displaySubLabel.textContent = "";
+    this.dom.displayTime.classList.remove('visible');
+    this.dom.progressBar.classList.remove('visible');
+    this.dom.displayMain.textContent = "_SIGNAL LOST_";
+    this.dom.displayMain.className = 'main-text amber';
+    this.showToast(message);
   }
 
   // ── 상태 2: DECODING ──
@@ -826,13 +540,12 @@ class PagerApp {
     this.clearTimers();
     this.state = STATE.DECODING;
 
-    const msg = this.getCurrentMessage();
-    if (!msg) {
+    const targetText = this.pendingMessageText || "";
+    if (!targetText) {
       this.updateDisplayIdle();
       return;
     }
 
-    const targetText = msg.text;
     this.dom.displayDots.textContent = "• • •";
     this.dom.displaySubLabel.textContent = "▼ 데이터 복호화 진행 중... ▼";
     this.dom.progressBar.classList.add('visible');
@@ -873,50 +586,15 @@ class PagerApp {
     this.clearTimers();
     this.state = STATE.REVEALED;
 
-    const msg = this.getCurrentMessage();
-    if (!msg) return;
+    if (!this.pendingMessageText) return;
 
     this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
+    this.dom.displaySubLabel.textContent = "터치하면 새 지령을 수신합니다";
     this.dom.progressBar.classList.remove('visible');
-    
-    this.dom.displayMain.textContent = msg.text;
+    this.dom.displayTime.classList.remove('visible');
+
+    this.dom.displayMain.textContent = this.pendingMessageText;
     this.dom.displayMain.className = 'main-text accent';
-
-    if (msg.time_info) {
-      this.dom.displayTime.textContent = msg.time_info;
-      this.dom.displayTime.classList.add('visible');
-    } else {
-      this.dom.displayTime.classList.remove('visible');
-    }
-  }
-
-  // ── 상태 4: CLEAR ──
-  startClear() {
-    this.clearTimers();
-    this.state = STATE.CLEAR;
-
-    this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
-    this.dom.displayTime.classList.remove('visible');
-    this.dom.progressBar.classList.remove('visible');
-
-    this.dom.displayMain.textContent = "_CLEAR._";
-    this.dom.displayMain.className = 'main-text amber';
-  }
-
-  // ── 상태 5: COMPLETE ──
-  startComplete() {
-    this.clearTimers();
-    this.state = STATE.COMPLETE;
-
-    this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
-    this.dom.displayTime.classList.remove('visible');
-    this.dom.progressBar.classList.remove('visible');
-
-    this.dom.displayMain.textContent = "_ALL_CLEAR._";
-    this.dom.displayMain.className = 'main-text amber';
   }
 
   updateDisplayIdle() {
@@ -951,22 +629,25 @@ class PagerApp {
   // ── 설정 모달 열기/닫기 ──
   openModal() {
     this.dom.selectOrientation.value = this.config.orientation || 'landscape';
-    this.dom.inputIcsUrl.value = this.config.ics_url || '';
     this.dom.sliderVolume.value = this.config.volume;
     this.dom.labelVolume.textContent = `${this.config.volume}%`;
-    this.dom.selectAutoSync.value = String(this.config.auto_sync_min);
     this.dom.selectDecodeSpeed.value = this.config.decode_speed;
     this.dom.selectSoundType.value = this.config.sound_type || 'file';
     this.dom.toggleScanlines.checked = this.config.scanlines;
     this.dom.toggleVignette.checked = this.config.vignette !== false;
-    if (this.dom.toggleAlarm) {
-      this.dom.toggleAlarm.checked = this.config.alarm_enabled !== false;
+    if (this.dom.inputGeminiKey) {
+      this.dom.inputGeminiKey.value = this.config.gemini_api_key || '';
+    }
+    if (this.dom.inputGeminiHint) {
+      this.dom.inputGeminiHint.value = this.config.gemini_hint || '';
+    }
+    if (this.dom.selectGeminiModel) {
+      this.dom.selectGeminiModel.value = this.config.gemini_model || 'gemini-2.5-flash';
+    }
+    if (this.config.gemini_api_key && this.config.gemini_api_key.trim().length > 10) {
+      this.fetchAvailableModels(this.config.gemini_api_key.trim());
     }
     this.applyCustomColors(this.config.font_color, this.config.bg_color);
-
-    // 사용자가 추가/편집한 STAGE 목록 복원 및 렌더링
-    this.customStages = JSON.parse(JSON.stringify(this.messages));
-    this.renderCustomStageCards();
 
     this.dom.modal.classList.remove('hidden');
   }
@@ -976,143 +657,19 @@ class PagerApp {
     this.dom.modal.classList.add('hidden');
   }
 
-  // ── 동적 STAGE 카드 렌더링 (각 메시지가 개별 카드로 분리됨) ──
-  renderCustomStageCards() {
-    this.dom.stageCardsContainer.innerHTML = '';
-    this.dom.labelCustomStageCount.textContent = `${this.customStages.length} STAGES`;
-
-    const pillClasses = ['stage-pill-cyan', 'stage-pill-amber', 'stage-pill-green'];
-
-    this.customStages.forEach((stage, sIdx) => {
-      const stageNum = sIdx + 1;
-      const pillClass = pillClasses[sIdx % pillClasses.length];
-      const stageCard = document.createElement('div');
-      stageCard.className = 'stage-edit-card';
-
-      const messages = stage.messages || [];
-
-      let msgCardsHtml = '';
-      messages.forEach((m, mIdx) => {
-        msgCardsHtml += `
-          <div class="msg-card-item" data-sidx="${sIdx}" data-midx="${mIdx}">
-            <div class="msg-card-row">
-              <input type="text" class="msg-time-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.time_info || ''}" placeholder="시간 (예: 09:00 - 10:00)">
-              <button class="btn-del-msg" data-sidx="${sIdx}" data-midx="${mIdx}" title="메시지 삭제">&times;</button>
-            </div>
-            <input type="text" class="msg-text-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.text || ''}" placeholder="메시지 내용 입력">
-          </div>
-        `;
-      });
-
-      stageCard.innerHTML = `
-        <div class="stage-edit-header">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span class="stage-pill ${pillClass}">STAGE ${stageNum}</span>
-            <span class="stage-sub-hint">메시지 ${messages.length}개</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button class="btn-add-msg-to-stage btn-sm-text" data-sidx="${sIdx}">+ 메시지 추가</button>
-            ${this.customStages.length > 1 ? `<button class="btn-del-stage" data-sidx="${sIdx}">삭제</button>` : ''}
-          </div>
-        </div>
-        <div class="stage-msg-list" id="stage-msg-list-${sIdx}">
-          ${msgCardsHtml || '<div class="empty-msg-notice">등록된 메시지가 없습니다. [+ 메시지 추가]를 눌러 추가하세요.</div>'}
-        </div>
-      `;
-
-      // STAGE 삭제 버튼
-      const delStageBtn = stageCard.querySelector('.btn-del-stage');
-      if (delStageBtn) {
-        delStageBtn.addEventListener('click', (e) => {
-          this.syncCustomBufferFromDOM();
-          const targetIdx = parseInt(e.target.dataset.sidx, 10);
-          this.customStages.splice(targetIdx, 1);
-          this.renderCustomStageCards();
-          this.showToast(`STAGE 삭제됨 (현재 ${this.customStages.length}개)`);
-        });
-      }
-
-      // 메시지 추가 버튼
-      const addMsgBtn = stageCard.querySelector('.btn-add-msg-to-stage');
-      if (addMsgBtn) {
-        addMsgBtn.addEventListener('click', (e) => {
-          this.syncCustomBufferFromDOM();
-          const targetSIdx = parseInt(e.target.dataset.sidx, 10);
-          if (!this.customStages[targetSIdx].messages) this.customStages[targetSIdx].messages = [];
-          this.customStages[targetSIdx].messages.push({ text: `새 메시지`, time_info: "" });
-          this.renderCustomStageCards();
-        });
-      }
-
-      // 개별 메시지 삭제 버튼
-      stageCard.querySelectorAll('.btn-del-msg').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          this.syncCustomBufferFromDOM();
-          const targetSIdx = parseInt(e.target.dataset.sidx, 10);
-          const targetMIdx = parseInt(e.target.dataset.midx, 10);
-          this.customStages[targetSIdx].messages.splice(targetMIdx, 1);
-          this.renderCustomStageCards();
-        });
-      });
-
-      this.dom.stageCardsContainer.appendChild(stageCard);
-    });
-  }
-
-  syncCustomBufferFromDOM() {
-    this.customStages.forEach((stage, sIdx) => {
-      stage.stage = sIdx + 1;
-      const msgItems = document.querySelectorAll(`.msg-card-item[data-sidx="${sIdx}"]`);
-      if (msgItems && msgItems.length > 0) {
-        const parsedMessages = [];
-        msgItems.forEach(item => {
-          const timeInput = item.querySelector('.msg-time-input');
-          const textInput = item.querySelector('.msg-text-input');
-          const time_info = timeInput ? timeInput.value.trim() : "";
-          const rawText = textInput ? textInput.value.trim() : "";
-          const text = this.truncateText(rawText, 30);
-          if (text || time_info) {
-            parsedMessages.push({ text: text || "(빈 메시지)", time_info });
-          }
-        });
-        stage.messages = parsedMessages;
-      }
-    });
-  }
-
-  applyCustomStages() {
-    this.syncCustomBufferFromDOM();
-    const validStages = this.customStages.filter(s => s.messages && s.messages.length > 0);
-
-    if (!validStages.length) {
-      alert("최소 1개 이상의 메시지를 작성해야 합니다.");
-      return;
-    }
-
-    this.saveStoredMessages(validStages);
-    this.showToast(`${validStages.length}개 단계 메시지가 시뮬레이터에 적용되었습니다.`);
-    this.closeModal();
-  }
-
   saveSettingsFromModal() {
-    this.syncCustomBufferFromDOM();
-    const validStages = this.customStages.filter(s => s.messages && s.messages.length > 0);
-    if (validStages.length > 0) {
-      this.saveStoredMessages(validStages);
-    }
-
     const newConfig = {
       orientation: this.dom.selectOrientation.value || 'landscape',
-      ics_url: this.dom.inputIcsUrl.value.trim(),
       volume: parseInt(this.dom.sliderVolume.value, 10),
-      auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
       decode_speed: this.dom.selectDecodeSpeed.value,
       sound_type: this.dom.selectSoundType.value,
       font_color: this.config.font_color || '#2FBFFC',
       bg_color: this.config.bg_color || '#000000',
       scanlines: this.dom.toggleScanlines.checked,
       vignette: this.dom.toggleVignette.checked,
-      alarm_enabled: this.dom.toggleAlarm ? this.dom.toggleAlarm.checked : true,
+      gemini_api_key: this.dom.inputGeminiKey ? this.dom.inputGeminiKey.value.trim() : (this.config.gemini_api_key || ''),
+      gemini_hint: this.dom.inputGeminiHint ? this.dom.inputGeminiHint.value.trim() : (this.config.gemini_hint || ''),
+      gemini_model: this.dom.selectGeminiModel ? this.dom.selectGeminiModel.value : (this.config.gemini_model || 'gemini-2.5-flash'),
     };
     this.saveConfig(newConfig);
     this.showToast("환경 설정이 저장되었습니다.");
@@ -1122,262 +679,136 @@ class PagerApp {
   resetDefaults() {
     if (confirm("모든 설정을 기본값으로 초기화하시겠습니까?")) {
       this.saveConfig(DEFAULT_CONFIG);
-      this.saveStoredMessages(DEFAULT_MESSAGES);
       this.openModal();
       this.showToast("기본값으로 복원되었습니다.");
     }
   }
 
-  // ── Google Calendar ICS 파싱 & 동기화 ──
-  async fetchIcsContent(rawUrl) {
-    let cleanUrl = rawUrl.trim();
-    if (cleanUrl.startsWith("webcal://")) {
-      cleanUrl = "https://" + cleanUrl.substring(9);
+  // ── Gemini AI 실시간 지령 생성 ──
+  // 사용자가 화면을 터치할 때마다 호출되어, '프로젝트 문' 세계관 관리부 톤의
+  // 지령 한 줄을 실시간으로 생성한다(사전 작성/저장된 메시지를 쓰지 않음).
+  buildGeminiSingleMessageRequestBody(hint) {
+    const systemPrompt = [
+      "너는 '프로젝트 문(Project Moon)' 세계관(로보토미 코퍼레이션, 라이브러리 오브 루이나, 림버스 컴퍼니)에 등장하는",
+      "'검지(Index)'가 단말기로 하달하는 '지령' 한 줄을 작성하는 역할이다.",
+      "",
+      "규칙:",
+      "- 이유는 알 수 없지만 절대적으로 순응해야 하는, 서늘하고 단호한 명령조로 쓴다. (예: '~할 것.', '~하라.')",
+      "- 지령 문구는 45자 이내로 한두 문장으로 간결하게 작성한다.",
+      "- 실존 캐릭터 이름이나 대사를 그대로 재현하지 말고, 분위기만 차용한 창작 지령을 만든다.",
+      "- 매번 새롭고 다른, 다소 황당하더라도 그럴듯한 소재로 작성한다.",
+      "- 반드시 한국어로만 작성한다.",
+      "- 다른 설명이나 따옴표, 인사말 없이 지령 문구 텍스트 하나만 출력한다."
+    ].join("\n");
+
+    let userPrompt = "위 규칙에 맞는 지령을 하나 발급하라.";
+    if (hint && hint.trim()) {
+      userPrompt += ` (현재 상황 참고: ${hint.trim()})`;
     }
 
-    // 1. Android Native Bridge: 안드로이드 네이티브 HTTP 연결로 직접 다운로드
-    if (window.AndroidBridge && typeof window.AndroidBridge.fetchIcsDirect === 'function') {
-      try {
-        const result = window.AndroidBridge.fetchIcsDirect(cleanUrl);
-        if (result && !result.startsWith("ERROR:") && result.includes("BEGIN:VCALENDAR")) {
-          return result;
-        } else if (result && result.startsWith("ERROR: HTTP 404")) {
-          throw new Error("404 오류: 캘린더 주소가 존재하지 않습니다. Google 캘린더 설정에서 '비공개 주소(iCal)'를 다시 확인해주세요.");
-        } else if (result && result.startsWith("ERROR: HTTP 403")) {
-          throw new Error("403 오류: 접근 권한이 없습니다. '비공개 주소(iCal)'가 올바른지 확인해주세요.");
-        }
-      } catch (err) {
-        if (err.message && (err.message.includes("404") || err.message.includes("403"))) throw err;
-        console.warn("AndroidBridge fetch failed, trying web fallbacks...", err);
+    return {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        temperature: 1.1,
+        maxOutputTokens: 250
       }
-    }
-
-    // 2. 브라우저 Direct fetch 시도
-    try {
-      const resp = await fetch(cleanUrl, { cache: 'no-cache' });
-      if (resp.ok) {
-        const text = await resp.text();
-        if (text && text.includes("BEGIN:VCALENDAR")) return text;
-      }
-    } catch (e) {}
-
-    // 3. 다중 고신뢰도 CORS 프록시 풀 순차 시도
-    const proxyGenerators = [
-      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-      (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-      (u) => `https://thingproxy.freeboard.io/fetch/${u}`
-    ];
-
-    for (const makeProxy of proxyGenerators) {
-      try {
-        const pUrl = makeProxy(cleanUrl);
-        const resp = await fetch(pUrl, { cache: 'no-cache' });
-        if (resp.ok) {
-          const text = await resp.text();
-          if (text && text.includes("BEGIN:VCALENDAR")) {
-            return text;
-          }
-        }
-      } catch (err) {}
-    }
-
-    throw new Error("캘린더 주소(iCal)를 불러오지 못했습니다. Google 캘린더 설정의 [캘린더 통합] ➔ [iCal 형식의 비공개 주소]가 올바른지 확인해주세요.");
+    };
   }
 
-  async syncCalendar(url, isSilent = false) {
-    if (!url || url.trim().length < 10) {
-      if (!isSilent) alert("유효한 Google Calendar 비공개 iCal 주소를 입력해주세요.");
-      return;
-    }
-
-    const cleanUrl = url.trim().replace(/^webcal:\/\//, 'https://');
-    if (!cleanUrl.includes("calendar.google.com") && !cleanUrl.endsWith(".ics")) {
-      if (!isSilent) {
-        const proceed = confirm("입력된 주소가 일반적인 Google 캘린더 iCal 주소(.ics)와 다릅니다. 계속 진행하시겠습니까?");
-        if (!proceed) return;
-      }
-    }
-
-    if (!isSilent && this.dom.btnSyncNow) {
-      this.dom.btnSyncNow.textContent = "동기화 중...";
-      this.dom.btnSyncNow.disabled = true;
-    }
-
+  // API 키에 따라 사용 가능한 Gemini 모델 목록을 동적으로 가져와 셀렉트 박스에 반영한다.
+  async fetchAvailableModels(apiKey) {
+    if (!apiKey || apiKey.trim().length < 10) return;
     try {
-      const icsText = await this.fetchIcsContent(cleanUrl);
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey.trim())}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data.models || !Array.isArray(data.models)) return;
 
-      if (!icsText || !icsText.includes("BEGIN:VCALENDAR")) {
-        throw new Error("올바른 iCal/ICS 파일 형식이 아닙니다.");
-      }
+      const validModels = data.models
+        .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+        .map(m => m.name.replace(/^models\//, ''))
+        .filter(name => name.startsWith('gemini'));
 
-      const events = this.parseIcsText(icsText);
-      const stages = this.distributeEventsTo3Stages(events.map(e => this.formatEvent(e)));
-
-      this.saveStoredMessages(stages);
-      this.config.ics_url = cleanUrl;
-      this.saveConfig(this.config);
-
-      if (!isSilent) {
-        if (events.length > 0) {
-          this.showToast(`오늘 일정 ${events.length}개를 성공적으로 가져왔습니다.`);
-        } else {
-          this.showToast("동기화 완료: 오늘(KST) 등록된 일정이 없습니다 (0건).");
-        }
-        if (this.dom.btnSyncNow) {
-          this.dom.btnSyncNow.textContent = "동기화";
-          this.dom.btnSyncNow.disabled = false;
-        }
+      if (validModels.length > 0) {
+        this.updateModelSelectOptions(validModels);
       }
     } catch (e) {
-      console.error("캘린더 동기화 실패:", e);
-      if (!isSilent) {
-        alert(`캘린더 동기화 실패:\n${e.message}`);
-        if (this.dom.btnSyncNow) {
-          this.dom.btnSyncNow.textContent = "동기화";
-          this.dom.btnSyncNow.disabled = false;
-        }
-      }
+      console.warn("모델 목록 조회 실패 (기본 목록 유지):", e);
     }
   }
 
-  // ── 한국 표준시(KST) 순수 오늘 일정 파싱 ──
-  parseIcsText(icsText) {
-    const now = new Date();
-    // KST 시간 계산 (UTC + 9)
-    const kst = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + (9 * 3600 * 1000));
-    const todayY = kst.getFullYear();
-    const todayM = kst.getMonth() + 1;
-    const todayD = kst.getDate();
+  updateModelSelectOptions(models) {
+    if (!this.dom.selectGeminiModel) return;
+    const currentVal = this.config.gemini_model || 'gemini-2.5-flash';
 
-    const events = [];
-    const cleanIcs = icsText.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').replace(/\r[ \t]/g, '');
-    const lines = cleanIcs.split(/\r\n|\n|\r/);
-    
-    let inEvent = false;
-    let curEvent = {};
+    const preferredOrder = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-2.5-pro',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro'
+    ];
 
-    for (let line of lines) {
-      line = line.trim();
-      if (line === "BEGIN:VEVENT") {
-        inEvent = true;
-        curEvent = {};
-      } else if (line === "END:VEVENT") {
-        inEvent = false;
-        if (this.isEventToday(curEvent, todayY, todayM, todayD)) {
-          events.push(curEvent);
-        }
-      } else if (inEvent && line.includes(":")) {
-        const idx = line.indexOf(":");
-        const rawKey = line.substring(0, idx);
-        const val = line.substring(idx + 1);
-        const key = rawKey.split(";")[0].toUpperCase();
-        curEvent[key] = val;
-      }
+    const allModels = [
+      ...preferredOrder.filter(m => models.includes(m)),
+      ...models.filter(m => !preferredOrder.includes(m))
+    ];
+
+    this.dom.selectGeminiModel.innerHTML = '';
+    allModels.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      let label = m;
+      if (m === 'gemini-2.5-flash') label = `${m} (기본 / 초고속)`;
+      else if (m === 'gemini-2.0-flash') label = `${m} (고속 / 안정)`;
+      else if (m === 'gemini-2.5-pro') label = `${m} (심층 추론)`;
+      else if (m === 'gemini-1.5-flash') label = `${m} (레거시 플래시)`;
+      opt.textContent = label;
+      this.dom.selectGeminiModel.appendChild(opt);
+    });
+
+    if (allModels.includes(currentVal)) {
+      this.dom.selectGeminiModel.value = currentVal;
+    } else if (allModels.length > 0) {
+      this.dom.selectGeminiModel.value = allModels[0];
+      this.config.gemini_model = allModels[0];
+      this.saveConfig({ gemini_model: allModels[0] });
     }
-
-    events.sort((a, b) => (a.DTSTART || '').localeCompare(b.DTSTART || ''));
-    return events;
   }
 
-  isEventToday(ev, y, m, d) {
-    const dtstart = ev.DTSTART || "";
-    if (!dtstart) return false;
-
-    // 1. 종일 일정 (YYYYMMDD) - 오늘과 같은 년도, 같은 월, 같은 일
-    if (dtstart.length === 8) {
-      const ey = parseInt(dtstart.substr(0, 4), 10);
-      const em = parseInt(dtstart.substr(4, 2), 10);
-      const ed = parseInt(dtstart.substr(6, 2), 10);
-      return ey === y && em === m && ed === d;
+  // Gemini API를 직접 호출해서 지령 텍스트 한 줄을 반환한다. 실패 시 예외를 던진다.
+  async generateGeminiMessage(hint) {
+    const apiKey = (this.config.gemini_api_key || "").trim();
+    if (!apiKey || apiKey.length < 10) {
+      throw new Error("Gemini API 키를 입력해주세요.");
     }
 
-    // 2. 시간 지정 일정 (YYYYMMDDTHHMMSS)
-    if (dtstart.includes("T")) {
-      const raw = dtstart.replace("Z", "");
-      const ey = parseInt(raw.substr(0, 4), 10);
-      const em = parseInt(raw.substr(4, 2), 10);
-      const ed = parseInt(raw.substr(6, 2), 10);
-      const eh = parseInt(raw.substr(9, 2), 10) || 0;
-      const emn = parseInt(raw.substr(11, 2), 10) || 0;
+    const model = (this.config.gemini_model || "gemini-2.5-flash").trim();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const body = this.buildGeminiSingleMessageRequestBody(hint);
 
-      if (dtstart.endsWith("Z")) {
-        // UTC 시간 -> 한국 시간(KST, UTC+9)으로 환산 후 오늘(y년 m월 d일)과 일치하는지 비교
-        const utcDate = new Date(Date.UTC(ey, em - 1, ed, eh, emn));
-        const kstDate = new Date(utcDate.getTime() + 9 * 3600 * 1000);
-        return kstDate.getUTCFullYear() === y && (kstDate.getUTCMonth() + 1) === m && kstDate.getUTCDate() === d;
-      }
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
 
-      // 로컬 시간
-      return ey === y && em === m && ed === d;
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      throw new Error(`Gemini API 오류 (HTTP ${resp.status}): ${errText.slice(0, 200)}`);
     }
 
-    return false;
+    const data = await resp.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) {
+      throw new Error("Gemini 응답에서 지령 내용을 찾을 수 없습니다.");
+    }
+
+    const cleaned = rawText.trim().replace(/^["'\s]+|["'\s]+$/g, "");
+    return this.truncateText(cleaned, 60);
   }
 
-  formatEvent(ev) {
-    const rawSummary = (ev.SUMMARY || "(제목 없음)").replace(/\\([,;Nn\\])/g, (m, c) => (c === 'n' || c === 'N') ? ' ' : c);
-    const summary = this.truncateText(rawSummary, 30);
-    const dtstart = ev.DTSTART || "";
-    const dtend = ev.DTEND || "";
-    let timeInfo = "오늘 종일";
-
-    if (dtstart.includes("T")) {
-      const rawS = dtstart.replace("Z", "");
-      let sh = parseInt(rawS.substr(9, 2), 10);
-      let sm = rawS.substr(11, 2);
-      if (dtstart.endsWith("Z")) sh = (sh + 9) % 24;
-      const startStr = `${String(sh).padStart(2, '0')}:${sm}`;
-
-      if (dtend && dtend.includes("T")) {
-        const rawE = dtend.replace("Z", "");
-        let eh = parseInt(rawE.substr(9, 2), 10);
-        let em = rawE.substr(11, 2);
-        if (dtend.endsWith("Z")) eh = (eh + 9) % 24;
-        const endStr = `${String(eh).padStart(2, '0')}:${em}`;
-        timeInfo = `${startStr} - ${endStr}`;
-      } else {
-        timeInfo = startStr;
-      }
-    }
-
-    return { text: summary, time_info: timeInfo };
-  }
-
-  distributeEventsTo3Stages(formattedEvents) {
-    if (!formattedEvents || formattedEvents.length === 0) {
-      return [{ stage: 1, messages: [{ text: "오늘 등록된 일정이 없습니다.", time_info: "오늘" }] }];
-    }
-
-    const n = 3;
-    const stages = [];
-    const total = formattedEvents.length;
-
-    if (total <= 3) {
-      for (let s = 0; s < total; s++) {
-        stages.push({
-          stage: s + 1,
-          messages: [formattedEvents[s]]
-        });
-      }
-    } else {
-      const base = Math.floor(total / n);
-      const extra = total % n;
-      let idx = 0;
-
-      for (let s = 0; s < n; s++) {
-        const count = base + (s < extra ? 1 : 0);
-        if (count === 0) continue;
-        stages.push({
-          stage: s + 1,
-          messages: formattedEvents.slice(idx, idx + count)
-        });
-        idx += count;
-      }
-    }
-
-    return stages;
-  }
 
   // ── 프리미엄 사이버 컬러 피커 시스템 ──
   initCustomColorPicker() {
