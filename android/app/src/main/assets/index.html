@@ -98,11 +98,11 @@
 
       <!-- 세그먼트 탭 네비게이션 -->
       <div class="modal-tabs">
-        <button class="tab-btn active" data-tab="tab-messages">
-          <span>지령</span>
-        </button>
-        <button class="tab-btn" data-tab="tab-calendar">
+        <button class="tab-btn active" data-tab="tab-calendar">
           <span>캘린더 연동</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-messages">
+          <span>지령</span>
         </button>
         <button class="tab-btn" data-tab="tab-sound">
           <span>화면</span>
@@ -112,8 +112,43 @@
       <!-- 모달 본문 영역 -->
       <div class="modal-body">
         
-        <!-- ── 탭 1: 지령 설정 (AI 실시간 생성 or 수동 입력) ── -->
-        <div id="tab-messages" class="tab-pane active">
+        <!-- ── 탭 1: 캘린더 연동 (Google 캘린더 iCal 최우선) ── -->
+        <div id="tab-calendar" class="tab-pane active">
+          
+          <!-- iCal 비공개 URL 연동 -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <span class="card-tag">Google 캘린더 iCal 연동 (최우선 적용)</span>
+              <span id="calendar-status-badge" class="status-badge-cyber">미연동</span>
+            </div>
+            <div class="input-with-btn">
+              <input type="text" id="input-ics-url" placeholder="iCal 비공개 주소 입력 (https://.../basic.ics)" autocomplete="off" spellcheck="false">
+              <button type="button" id="btn-sync-now" class="btn btn-primary">동기화</button>
+              <button type="button" id="btn-disconnect-cal" class="btn btn-danger-outline" style="display:none;">해제</button>
+            </div>
+          </div>
+
+          <!-- 자동 동기화 주기 -->
+          <div class="option-row">
+            <div class="option-title">자동 동기화 주기</div>
+            <select id="select-auto-sync" class="cyber-select">
+              <option value="0">끄기</option>
+              <option value="5">5분</option>
+              <option value="10">10분</option>
+              <option value="30">30분</option>
+              <option value="60" selected>1시간</option>
+            </select>
+          </div>
+
+        </div>
+
+        <!-- ── 탭 2: 지령 설정 (AI 실시간 생성 or 수동 입력) ── -->
+        <div id="tab-messages" class="tab-pane">
+
+          <!-- 캘린더 연동 최우선 적용 안내 배너 -->
+          <div id="calendar-priority-notice" class="notice-box-cyber hidden" style="margin-bottom: 10px;">
+            캘린더 연동 활성화 중: 오늘의 일정이 지령보다 최우선 적용됩니다.
+          </div>
 
           <!-- 모드 전환 토글 카드 -->
           <div class="section-card">
@@ -213,34 +248,6 @@
             <button id="btn-apply-custom-messages" class="btn btn-primary btn-block" style="margin-top: 10px;">
               적용하기
             </button>
-          </div>
-
-        </div>
-
-        <!-- ── 탭 2: 캘린더 연동 (iCal 전용) ── -->
-        <div id="tab-calendar" class="tab-pane">
-          
-          <!-- iCal 비공개 URL 연동 -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <span class="card-tag">Google 캘린더 iCal 연동</span>
-            </div>
-            <div class="input-with-btn">
-              <input type="text" id="input-ics-url" placeholder="iCal 비공개 주소 입력 (https://.../basic.ics)" autocomplete="off" spellcheck="false">
-              <button id="btn-sync-now" class="btn btn-primary">동기화</button>
-            </div>
-          </div>
-
-          <!-- 자동 동기화 주기 -->
-          <div class="option-row">
-            <div class="option-title">자동 동기화 주기</div>
-            <select id="select-auto-sync" class="cyber-select">
-              <option value="0">끄기</option>
-              <option value="5">5분</option>
-              <option value="10">10분</option>
-              <option value="30">30분</option>
-              <option value="60" selected>1시간</option>
-            </select>
           </div>
 
         </div>

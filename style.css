@@ -72,6 +72,17 @@ html, body {
   display: none !important;
 }
 
+.notice-box-cyber {
+  background: rgba(47, 191, 252, 0.08);
+  border: 1px solid rgba(47, 191, 252, 0.35);
+  border-left: 3px solid var(--cyan-primary);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--cyan-accent);
+  letter-spacing: 0.5px;
+}
+
 /* CRT 스캔라인 & 비네팅 효과 */
 .crt-overlay {
   position: fixed;

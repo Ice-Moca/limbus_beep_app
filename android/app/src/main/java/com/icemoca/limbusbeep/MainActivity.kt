@@ -120,7 +120,7 @@ class MainActivity : AppCompatActivity() {
                 conn.connectTimeout = 15000
                 conn.readTimeout = 20000
                 conn.instanceFollowRedirects = true
-                conn.setRequestProperty("Accept", "application/json")
+                conn.setRequestProperty("Accept", "*/*")
                 val responseCode = conn.responseCode
                 val stream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
                 val responseText = stream?.bufferedReader()?.use { it.readText() } ?: ""

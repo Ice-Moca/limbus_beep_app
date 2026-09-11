@@ -72,6 +72,7 @@ class PagerApp {
     this.beepTimeout = null;
     this.audioCtx = null;
     this.todayKey = this.getTodayKey();
+    this.calendarStages = this.loadCalendarStages();
     this.firedAlarms = this.loadFiredAlarms(this.todayKey);
     this.pendingAlarmTarget = null;
     this._keyDebounce = null;
@@ -146,6 +147,9 @@ class PagerApp {
       // 캘린더 동기화 DOM
       inputIcsUrl: document.getElementById('input-ics-url'),
       btnSyncNow: document.getElementById('btn-sync-now'),
+      btnDisconnectCal: document.getElementById('btn-disconnect-cal'),
+      calendarStatusBadge: document.getElementById('calendar-status-badge'),
+      calendarPriorityNotice: document.getElementById('calendar-priority-notice'),
       selectAutoSync: document.getElementById('select-auto-sync'),
 
       // STAGE 수동 메시지 관리 DOM
@@ -399,15 +403,32 @@ class PagerApp {
       this.playBeepSound();
     });
 
-    // 8. 캘린더 수동 동기화
-    this.dom.btnSyncNow.addEventListener('click', () => {
-      const url = this.dom.inputIcsUrl.value.trim();
-      if (!url) {
-        this.showToast("iCal 주소를 입력해주세요.");
-        return;
-      }
-      this.syncCalendar(url, false);
-    });
+    // 8. 캘린더 수동 동기화 및 연동 해제
+    if (this.dom.btnSyncNow) {
+      this.dom.btnSyncNow.addEventListener('click', () => {
+        const url = this.dom.inputIcsUrl.value.trim();
+        if (!url) {
+          this.showToast("iCal 주소를 입력해주세요.");
+          return;
+        }
+        this.config.ics_url = url;
+        this.saveConfig({ ics_url: url });
+        this.syncCalendar(url, false);
+      });
+    }
+
+    if (this.dom.btnDisconnectCal) {
+      this.dom.btnDisconnectCal.addEventListener('click', () => {
+        this.config.ics_url = '';
+        this.saveConfig({ ics_url: '' });
+        this.saveCalendarStages(null);
+        if (this.dom.inputIcsUrl) this.dom.inputIcsUrl.value = '';
+        this.updateCalendarStatusUI();
+        this.updateDisplay();
+        this.scheduleAlarms();
+        this.showToast("캘린더 연동이 해제되었습니다. 지령 설정이 적용됩니다.");
+      });
+    }
 
     // 9. 설정 저장
     this.dom.btnSaveSettings.addEventListener('click', () => {
@@ -552,6 +573,72 @@ class PagerApp {
     this.scheduleAlarms();
   }
 
+  // ── 캘린더 연동 데이터 관리 (최우선 적용) ──
+  loadCalendarStages() {
+    try {
+      const stored = localStorage.getItem('limbus_beep_calendar_stages');
+      const date = localStorage.getItem('limbus_beep_calendar_date');
+      if (date && date !== this.todayKey) {
+        localStorage.removeItem('limbus_beep_calendar_stages');
+        return null;
+      }
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  saveCalendarStages(stages) {
+    this.calendarStages = stages;
+    if (stages && stages.length > 0) {
+      localStorage.setItem('limbus_beep_calendar_stages', JSON.stringify(stages));
+      localStorage.setItem('limbus_beep_calendar_date', this.todayKey);
+    } else {
+      localStorage.removeItem('limbus_beep_calendar_stages');
+      localStorage.removeItem('limbus_beep_calendar_date');
+    }
+    this.currentStageIdx = 0;
+    this.currentMsgIdx = 0;
+    this.updateCalendarStatusUI();
+    this.updateDisplay();
+    this.scheduleAlarms();
+  }
+
+  isCalendarActive() {
+    return !!(this.config.ics_url && this.config.ics_url.trim().length > 0 && this.calendarStages && this.calendarStages.length > 0);
+  }
+
+  getActiveStages() {
+    if (this.isCalendarActive()) {
+      return this.calendarStages;
+    }
+    return this.messages || DEFAULT_MESSAGES;
+  }
+
+  updateCalendarStatusUI() {
+    const isCalActive = this.isCalendarActive();
+    if (this.dom.calendarStatusBadge) {
+      if (isCalActive) {
+        const count = this.calendarStages.reduce((acc, s) => acc + (s.messages ? s.messages.length : 0), 0);
+        this.dom.calendarStatusBadge.textContent = `연동됨 (${count}개 일정)`;
+        this.dom.calendarStatusBadge.className = 'status-badge-cyber active';
+      } else if (this.config.ics_url && this.config.ics_url.trim().length > 0) {
+        this.dom.calendarStatusBadge.textContent = '일정 없음';
+        this.dom.calendarStatusBadge.className = 'status-badge-cyber';
+      } else {
+        this.dom.calendarStatusBadge.textContent = '미연동';
+        this.dom.calendarStatusBadge.className = 'status-badge-cyber';
+      }
+    }
+    if (this.dom.btnDisconnectCal) {
+      this.dom.btnDisconnectCal.style.display = (this.config.ics_url && this.config.ics_url.trim().length > 0) ? 'inline-block' : 'none';
+    }
+    if (this.dom.calendarPriorityNotice) {
+      this.dom.calendarPriorityNotice.classList.toggle('hidden', !isCalActive);
+      this.dom.calendarPriorityNotice.style.display = isCalActive ? 'block' : 'none';
+    }
+  }
+
   applyCustomColors(fontColor, bgColor) {
     const fc = (fontColor || this.config.font_color || '#2fbffc').toUpperCase();
     const bc = (bgColor || this.config.bg_color || '#000000').toUpperCase();
@@ -639,6 +726,7 @@ class PagerApp {
     }
     this.applyCustomColors(this.config.font_color, this.config.bg_color);
     this.applyOrientation(this.config.orientation || 'landscape');
+    this.updateCalendarStatusUI();
     this.scheduleAlarms();
   }
 
@@ -665,7 +753,7 @@ class PagerApp {
 
   scheduleAlarms() {
     const isEnabled = this.config.alarm_enabled !== false;
-    if (!isEnabled) {
+    if (!isEnabled || (!this.isCalendarActive() && this.config.directive_mode === 'ai')) {
       if (window.AndroidBridge && typeof window.AndroidBridge.cancelAllAlarms === 'function') {
         window.AndroidBridge.cancelAllAlarms();
       }
@@ -674,8 +762,9 @@ class PagerApp {
 
     const now = new Date();
     const alarmsList = [];
+    const stages = this.getActiveStages();
 
-    this.messages.forEach((stage, sIdx) => {
+    stages.forEach((stage, sIdx) => {
       if (!stage.messages) return;
       stage.messages.forEach((msg, mIdx) => {
         const match = (msg.time_info || '').match(/\b(\d{1,2}):(\d{2})\b/);
@@ -714,7 +803,7 @@ class PagerApp {
 
   checkAlarms() {
     if (this.config.alarm_enabled === false) return;
-    if (this.config.directive_mode === 'ai') return; // AI 모드일 때는 수동 메시지 알람 비활성화
+    if (!this.isCalendarActive() && this.config.directive_mode === 'ai') return;
 
     const now = new Date();
     const currentHours = now.getHours();
@@ -726,7 +815,8 @@ class PagerApp {
       this.firedAlarms = this.loadFiredAlarms(todayKey);
     }
 
-    this.messages.forEach((stage, sIdx) => {
+    const stages = this.getActiveStages();
+    stages.forEach((stage, sIdx) => {
       if (!stage.messages) return;
       stage.messages.forEach((msg, mIdx) => {
         const match = (msg.time_info || '').match(/\b(\d{1,2}):(\d{2})\b/);
@@ -841,8 +931,9 @@ class PagerApp {
   }
 
   getCurrentStage() {
-    if (!this.messages || this.messages.length === 0) return null;
-    return this.messages[this.currentStageIdx] || this.messages[0];
+    const stages = this.getActiveStages();
+    if (!stages || stages.length === 0) return null;
+    return stages[this.currentStageIdx] || stages[0];
   }
 
   getCurrentMessage() {
@@ -868,6 +959,44 @@ class PagerApp {
   advance() {
     this.clearTimers();
 
+    // 1. 캘린더 연동 활성화 상태 (어떤 지령 모드보다 캘린더 일정이 항상 최우선)
+    if (this.isCalendarActive()) {
+      const stages = this.calendarStages;
+      const stage = this.getCurrentStage();
+
+      if (this.state === STATE.IDLE) {
+        this.currentStageIdx = 0;
+        this.currentMsgIdx = 0;
+        this.startBeeping();
+      } else if (this.state === STATE.BEEPING) {
+        this.startDecoding();
+      } else if (this.state === STATE.DECODING) {
+        this.startRevealed();
+      } else if (this.state === STATE.REVEALED) {
+        if (stage && this.currentMsgIdx + 1 < stage.messages.length) {
+          this.currentMsgIdx++;
+          this.startBeeping();
+        } else {
+          const isLastStage = (this.currentStageIdx + 1 >= stages.length);
+          if (isLastStage) {
+            this.startComplete();
+          } else {
+            this.startClear();
+          }
+        }
+      } else if (this.state === STATE.CLEAR) {
+        this.currentStageIdx++;
+        this.currentMsgIdx = 0;
+        this.startBeeping();
+      } else if (this.state === STATE.COMPLETE) {
+        this.currentStageIdx = 0;
+        this.currentMsgIdx = 0;
+        this.startIdle();
+      }
+      return;
+    }
+
+    // 2. 캘린더 미연동 상태: 지령 설정(AI 모드 vs 수동 모드) 적용
     if (this.config.directive_mode === 'ai') {
       // ── AI 실시간 생성 모드 ──
       const apiKey = (this.config.gemini_api_key || "").trim();
@@ -903,6 +1032,9 @@ class PagerApp {
       }
     } else {
       // ── 수동 / 캘린더 모드 (기존 STAGE 순차 진행) ──
+      const stages = this.messages;
+      const stage = this.getCurrentStage();
+
       if (this.state === STATE.IDLE) {
         this.currentMsgIdx = 0;
         this.startBeeping();
@@ -911,12 +1043,11 @@ class PagerApp {
       } else if (this.state === STATE.DECODING) {
         this.startRevealed();
       } else if (this.state === STATE.REVEALED) {
-        const stage = this.getCurrentStage();
         if (stage && this.currentMsgIdx + 1 < stage.messages.length) {
           this.currentMsgIdx++;
           this.startBeeping();
         } else {
-          const isLastStage = (this.currentStageIdx + 1 >= this.messages.length);
+          const isLastStage = (this.currentStageIdx + 1 >= stages.length);
           if (isLastStage) {
             this.startComplete();
           } else {
@@ -937,7 +1068,13 @@ class PagerApp {
 
   replay() {
     this.clearTimers();
-    if (this.config.directive_mode === 'ai') {
+    if (this.isCalendarActive()) {
+      if (this.state === STATE.REVEALED || this.state === STATE.DECODING) {
+        this.startDecoding();
+      } else {
+        this.startBeeping();
+      }
+    } else if (this.config.directive_mode === 'ai') {
       if (this.pendingAiMessage) {
         this.startAiDecoding(this.pendingAiMessage);
       } else {
@@ -1177,8 +1314,16 @@ class PagerApp {
     if (this.state === STATE.IDLE) {
       this.dom.displayDots.textContent = "";
       const stageNum = this.currentStageIdx + 1;
-      this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // READY`;
-      this.dom.displayMain.textContent = "SPACE 또는 터치하여 시작";
+      if (this.isCalendarActive()) {
+        this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // CALENDAR SYNC`;
+        this.dom.displayMain.textContent = "SPACE 또는 터치하여 시작";
+      } else if (this.config.directive_mode === 'ai') {
+        this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // DIRECTIVE READY`;
+        this.dom.displayMain.textContent = "SPACE 또는 터치하여 지령 수신";
+      } else {
+        this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // READY`;
+        this.dom.displayMain.textContent = "SPACE 또는 터치하여 시작";
+      }
       this.dom.displayMain.className = 'main-text';
       this.dom.displayTime.classList.remove('visible');
       this.dom.progressBar.classList.remove('visible');
@@ -1202,6 +1347,14 @@ class PagerApp {
 
   // ── 설정 모달 열기/닫기 ──
   openModal() {
+    // 캘린더 연동 탭을 기본 첫 번째 탭으로 활성화
+    if (this.dom.tabBtns && this.dom.tabPanes) {
+      this.dom.tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === 'tab-calendar'));
+      this.dom.tabPanes.forEach(p => p.classList.toggle('active', p.id === 'tab-calendar'));
+    }
+
+    this.updateCalendarStatusUI();
+
     const isAi = (this.config.directive_mode === 'ai');
     this.updateDirectiveModeUI(isAi);
 
@@ -1212,7 +1365,7 @@ class PagerApp {
       this.dom.inputGeminiHint.value = this.config.gemini_hint || '';
     }
     if (this.dom.selectGeminiModel) {
-      this.dom.selectGeminiModel.value = this.config.gemini_model || 'gemini-2.5-flash';
+      this.dom.selectGeminiModel.value = this.config.gemini_model || 'gemini-2.0-flash';
     }
     if (this.dom.aiTestResult) {
       this.dom.aiTestResult.textContent = '';
@@ -1412,15 +1565,20 @@ class PagerApp {
   saveSettingsFromModal() {
     this.syncCustomBufferFromDOM();
     const isAi = this.dom.toggleDirectiveMode ? this.dom.toggleDirectiveMode.checked : (this.config.directive_mode === 'ai');
+    const icsUrlVal = this.dom.inputIcsUrl ? this.dom.inputIcsUrl.value.trim() : '';
+
+    if (!icsUrlVal && this.config.ics_url) {
+      this.saveCalendarStages(null);
+    }
     
     const newConfig = {
       directive_mode: isAi ? 'ai' : 'manual',
       ai_stage_count: this.config.ai_stage_count || 3,
       gemini_api_key: this.dom.inputGeminiKey ? this.dom.inputGeminiKey.value.trim() : (this.config.gemini_api_key || ''),
       gemini_hint: this.dom.inputGeminiHint ? this.dom.inputGeminiHint.value.trim() : (this.config.gemini_hint || ''),
-      gemini_model: this.dom.selectGeminiModel ? this.dom.selectGeminiModel.value : (this.config.gemini_model || 'gemini-2.5-flash'),
+      gemini_model: this.dom.selectGeminiModel ? this.dom.selectGeminiModel.value : (this.config.gemini_model || 'gemini-2.0-flash'),
       orientation: this.dom.selectOrientation.value,
-      ics_url: this.dom.inputIcsUrl.value.trim(),
+      ics_url: icsUrlVal,
       auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
       decode_speed: this.dom.selectDecodeSpeed.value,
       volume: parseInt(this.dom.sliderVolume.value, 10),
@@ -1432,6 +1590,7 @@ class PagerApp {
 
     this.saveConfig(newConfig);
     this.saveStoredMessages(this.customStages);
+    this.updateCalendarStatusUI();
     this.closeModal();
     this.showToast("설정이 저장되었습니다.");
   }
@@ -1748,6 +1907,7 @@ class PagerApp {
 
       const events = this.parseICS(icsText);
       if (events.length === 0) {
+        this.saveCalendarStages([]);
         if (!isAuto) this.showToast("오늘 예정된 일정이 없습니다.");
         return;
       }
@@ -1768,10 +1928,10 @@ class PagerApp {
       });
 
       const filteredStages = stages.filter(s => s.messages.length > 0);
-      this.saveStoredMessages(filteredStages);
+      this.saveCalendarStages(filteredStages);
 
       if (!isAuto) {
-        this.showToast(`오늘 일정 ${events.length}개가 동기화되었습니다!`);
+        this.showToast(`오늘 일정 ${events.length}개가 연동되었습니다! (최우선 적용)`);
         this.closeModal();
       }
     } catch (err) {
