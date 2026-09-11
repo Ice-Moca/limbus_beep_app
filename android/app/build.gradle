@@ -15,11 +15,22 @@ android {
         versionName "2.1.1"
     }
 
+    signingConfigs {
+        shared {
+            storeFile file("limbus_debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.shared
             minifyEnabled false
         }
         debug {
+            signingConfig signingConfigs.shared
             applicationIdSuffix ".debug"
             debuggable true
         }

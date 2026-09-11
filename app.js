@@ -18,6 +18,7 @@ const DEFAULT_CONFIG = {
   orientation: 'landscape', // landscape | portrait | sensor (가로 모드 기본)
   gemini_api_key: '',
   gemini_hint: '',
+  gemini_model: 'gemini-2.5-flash',
   decode_speed: 'normal',   // fast: 0.5s, normal: 0.9s, slow: 1.5s
   sound_type: 'file',       // file | synth
   font_color: '#2fbffc',    // 단테 블루 기본
@@ -68,6 +69,7 @@ class PagerApp {
       // Gemini API 설정 (실시간 지령 생성용)
       inputGeminiKey: document.getElementById('input-gemini-key'),
       inputGeminiHint: document.getElementById('input-gemini-hint'),
+      selectGeminiModel: document.getElementById('select-gemini-model'),
 
       // 설정 필드
       selectOrientation: document.getElementById('select-orientation'),
@@ -232,6 +234,43 @@ class PagerApp {
     this.dom.selectDecodeSpeed.addEventListener('change', (e) => {
       this.saveConfig({ decode_speed: e.target.value });
     });
+
+    // Gemini API 설정 실시간 반응 및 모델 자동 탐색
+    if (this.dom.inputGeminiKey) {
+      this.dom.inputGeminiKey.addEventListener('change', (e) => {
+        const key = e.target.value.trim();
+        this.saveConfig({ gemini_api_key: key });
+        if (key.length > 10) {
+          this.fetchAvailableModels(key);
+        }
+      });
+
+      let keyDebounceTimer = null;
+      this.dom.inputGeminiKey.addEventListener('input', (e) => {
+        clearTimeout(keyDebounceTimer);
+        const key = e.target.value.trim();
+        if (key.length > 15) {
+          keyDebounceTimer = setTimeout(() => {
+            this.saveConfig({ gemini_api_key: key });
+            this.fetchAvailableModels(key);
+          }, 600);
+        }
+      });
+    }
+
+    if (this.dom.inputGeminiHint) {
+      this.dom.inputGeminiHint.addEventListener('change', (e) => {
+        this.saveConfig({ gemini_hint: e.target.value.trim() });
+      });
+    }
+
+    if (this.dom.selectGeminiModel) {
+      this.dom.selectGeminiModel.addEventListener('change', (e) => {
+        this.config.gemini_model = e.target.value;
+        this.saveConfig({ gemini_model: e.target.value });
+        this.showToast(`모델 설정 완료: ${e.target.value}`);
+      });
+    }
 
     // 11. 설정 저장 및 기본값 복원
     this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
@@ -456,7 +495,7 @@ class PagerApp {
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayTime.classList.remove('visible');
     this.dom.displayMain.className = 'main-text dimmed';
-    this.dom.displaySubLabel.textContent = "AI 지령 수신 중...";
+    this.dom.displaySubLabel.textContent = "지령 수신 중...";
 
     let dotStep = 0;
     this.animInterval = setInterval(() => {
@@ -602,6 +641,12 @@ class PagerApp {
     if (this.dom.inputGeminiHint) {
       this.dom.inputGeminiHint.value = this.config.gemini_hint || '';
     }
+    if (this.dom.selectGeminiModel) {
+      this.dom.selectGeminiModel.value = this.config.gemini_model || 'gemini-2.5-flash';
+    }
+    if (this.config.gemini_api_key && this.config.gemini_api_key.trim().length > 10) {
+      this.fetchAvailableModels(this.config.gemini_api_key.trim());
+    }
     this.applyCustomColors(this.config.font_color, this.config.bg_color);
 
     this.dom.modal.classList.remove('hidden');
@@ -624,6 +669,7 @@ class PagerApp {
       vignette: this.dom.toggleVignette.checked,
       gemini_api_key: this.dom.inputGeminiKey ? this.dom.inputGeminiKey.value.trim() : (this.config.gemini_api_key || ''),
       gemini_hint: this.dom.inputGeminiHint ? this.dom.inputGeminiHint.value.trim() : (this.config.gemini_hint || ''),
+      gemini_model: this.dom.selectGeminiModel ? this.dom.selectGeminiModel.value : (this.config.gemini_model || 'gemini-2.5-flash'),
     };
     this.saveConfig(newConfig);
     this.showToast("환경 설정이 저장되었습니다.");
@@ -665,12 +711,70 @@ class PagerApp {
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       generationConfig: {
         temperature: 1.1,
-        maxOutputTokens: 500,
-        thinkingConfig: {
-          thinkingLevel: "minimal" // 아주 짧은 한 줄 지령이므로 사고 단계를 최소로 낮춰 토큰을 답변에 집중시킨다
-        }
+        maxOutputTokens: 250
       }
     };
+  }
+
+  // API 키에 따라 사용 가능한 Gemini 모델 목록을 동적으로 가져와 셀렉트 박스에 반영한다.
+  async fetchAvailableModels(apiKey) {
+    if (!apiKey || apiKey.trim().length < 10) return;
+    try {
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey.trim())}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data.models || !Array.isArray(data.models)) return;
+
+      const validModels = data.models
+        .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+        .map(m => m.name.replace(/^models\//, ''))
+        .filter(name => name.startsWith('gemini'));
+
+      if (validModels.length > 0) {
+        this.updateModelSelectOptions(validModels);
+      }
+    } catch (e) {
+      console.warn("모델 목록 조회 실패 (기본 목록 유지):", e);
+    }
+  }
+
+  updateModelSelectOptions(models) {
+    if (!this.dom.selectGeminiModel) return;
+    const currentVal = this.config.gemini_model || 'gemini-2.5-flash';
+
+    const preferredOrder = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-2.5-pro',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro'
+    ];
+
+    const allModels = [
+      ...preferredOrder.filter(m => models.includes(m)),
+      ...models.filter(m => !preferredOrder.includes(m))
+    ];
+
+    this.dom.selectGeminiModel.innerHTML = '';
+    allModels.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      let label = m;
+      if (m === 'gemini-2.5-flash') label = `${m} (기본 / 초고속)`;
+      else if (m === 'gemini-2.0-flash') label = `${m} (고속 / 안정)`;
+      else if (m === 'gemini-2.5-pro') label = `${m} (심층 추론)`;
+      else if (m === 'gemini-1.5-flash') label = `${m} (레거시 플래시)`;
+      opt.textContent = label;
+      this.dom.selectGeminiModel.appendChild(opt);
+    });
+
+    if (allModels.includes(currentVal)) {
+      this.dom.selectGeminiModel.value = currentVal;
+    } else if (allModels.length > 0) {
+      this.dom.selectGeminiModel.value = allModels[0];
+      this.config.gemini_model = allModels[0];
+      this.saveConfig({ gemini_model: allModels[0] });
+    }
   }
 
   // Gemini API를 직접 호출해서 지령 텍스트 한 줄을 반환한다. 실패 시 예외를 던진다.
@@ -680,8 +784,8 @@ class PagerApp {
       throw new Error("Gemini API 키를 입력해주세요.");
     }
 
-    const model = "gemini-3.6-flash"; // 필요시 최신 모델명으로 교체 가능
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const model = (this.config.gemini_model || "gemini-2.5-flash").trim();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const body = this.buildGeminiSingleMessageRequestBody(hint);
 
     const resp = await fetch(url, {
