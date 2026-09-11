@@ -1127,8 +1127,7 @@ class PagerApp {
     this.clearTimers();
     this.playBeepSound();
 
-    const stageNum = this.currentStageIdx + 1;
-    this.dom.displaySubLabel.textContent = `${stageNum}단계`;
+    this.dom.displaySubLabel.textContent = "";
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayMain.className = 'main-text loading';
@@ -1234,11 +1233,10 @@ class PagerApp {
     this.clearTimers();
     this.playBeepSound();
 
-    const stageNum = this.currentStageIdx + 1;
     const msg = this.getCurrentMessage();
     const template = msg ? msg.text : "NO DATA FOUND";
 
-    this.dom.displaySubLabel.textContent = `${stageNum}단계 // 신호 수신 중...`;
+    this.dom.displaySubLabel.textContent = "신호 수신 중...";
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
     this.dom.displayMain.className = 'main-text dimmed';
@@ -1359,9 +1357,8 @@ class PagerApp {
 
   updateDisplay() {
     if (this.state === STATE.IDLE) {
-      const stageNum = this.currentStageIdx + 1;
       this.dom.displayDots.textContent = "";
-      this.dom.displaySubLabel.textContent = `${stageNum}단계`;
+      this.dom.displaySubLabel.textContent = "";
       this.dom.displayMain.textContent = "SPACE 를 눌러 시작";
       this.dom.displayMain.className = 'main-text';
       this.dom.displayTime.classList.remove('visible');
