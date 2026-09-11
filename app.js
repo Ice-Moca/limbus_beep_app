@@ -1,5 +1,5 @@
 /**
- * Limbus Beep - 단테 삐삐 시뮬레이터 v2.1.0
+ * Limbus Beep - 단테 삐삐 시뮬레이터 v2.2.0-preview
  */
 
 // ── 상태 정의 ──
@@ -7,43 +7,92 @@ const STATE = {
   IDLE: 'IDLE',
   BEEPING: 'BEEPING',
   DECODING: 'DECODING',
-  REVEALED: 'REVEALED'
+  REVEALED: 'REVEALED',
+  CLEAR: 'CLEAR',
+  COMPLETE: 'COMPLETE'
 };
 
 const CIPHER_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*+-=?<>";
 
-// ── 기본 설정 ──
+// ── 기본 설정 및 초기 메시지 ──
 const DEFAULT_CONFIG = {
-  volume: 80,
-  orientation: 'landscape', // landscape | portrait | sensor (가로 모드 기본)
+  directive_mode: 'manual', // 'ai' 또는 'manual'
   gemini_api_key: '',
   gemini_hint: '',
   gemini_model: 'gemini-2.5-flash',
+  volume: 80,
+  orientation: 'landscape', // landscape | portrait | sensor (가로 모드 기본)
+  ics_url: '',
+  auto_sync_min: 60,
   decode_speed: 'normal',   // fast: 0.5s, normal: 0.9s, slow: 1.5s
   sound_type: 'file',       // file | synth
   font_color: '#2fbffc',    // 단테 블루 기본
   bg_color: '#000000',      // 딥 블랙 기본
   scanlines: true,
   vignette: true,
+  alarm_enabled: true,      // 등록된 시간에 알람 울리기 (기본 활성화)
 };
+
+const DEFAULT_MESSAGES = [
+  {
+    stage: 1,
+    messages: [
+      { text: "관리자님, 오늘의 일정을 확인하십시오.", time_info: "09:00 - 10:00" },
+      { text: "설정에서 구글 캘린더 iCal을 연동할 수 있습니다.", time_info: "11:00 - 12:00" }
+    ]
+  },
+  {
+    stage: 2,
+    messages: [
+      { text: "수감자들의 상태를 점검할 시간입니다.", time_info: "14:00 - 15:30" },
+      { text: "황금가지를 향한 여정을 계속하십시오.", time_info: "16:00 - 18:00" }
+    ]
+  },
+  {
+    stage: 3,
+    messages: [
+      { text: "오늘 하루도 수고하셨습니다.", time_info: "20:00 - 21:00" }
+    ]
+  }
+];
 
 class PagerApp {
   constructor() {
     this.state = STATE.IDLE;
-    this.pendingMessageText = ''; // 이번 사이클에서 Gemini가 생성한 지령 텍스트
-
+    this.currentStageIdx = 0;
+    this.currentMsgIdx = 0;
+    this.pendingAiMessage = '';
+    
     this.config = this.loadConfig();
-
+    this.messages = this.loadStoredMessages();
+    this.customStages = JSON.parse(JSON.stringify(this.messages));
+    
     this.animInterval = null;
     this.beepTimeout = null;
     this.audioCtx = null;
-
+    this.todayKey = this.getTodayKey();
+    this.firedAlarms = this.loadFiredAlarms(this.todayKey);
+    this.pendingAlarmTarget = null;
+    this._keyDebounce = null;
+    
     this.initDOM();
     this.initCustomColorPicker();
     this.bindEvents();
     this.applySettings();
     this.startClock();
     this.updateDisplay();
+    this.startAlarmWatcher();
+    this.scheduleAlarms();
+
+    // 초기 자동 동기화
+    if (this.config.ics_url && this.config.auto_sync_min > 0) {
+      setTimeout(() => this.syncCalendar(this.config.ics_url, true), 3000);
+      setInterval(() => {
+        if (this.config.ics_url && this.config.auto_sync_min > 0) {
+          this.syncCalendar(this.config.ics_url, true);
+        }
+      }, this.config.auto_sync_min * 60 * 1000);
+    }
   }
 
   // ── DOM 캐싱 ──
@@ -57,37 +106,73 @@ class PagerApp {
       progressBar: document.getElementById('progress-container'),
       progressFill: document.getElementById('progress-fill'),
       clock: document.getElementById('clock-display'),
-      // 모달 & 폼 컨트롤
-      modal: document.getElementById('settings-modal'),
+      
       btnOpenSettings: document.getElementById('btn-open-settings'),
       btnCloseSettings: document.getElementById('btn-close-settings'),
       btnCancelSettings: document.getElementById('btn-cancel-settings'),
       btnSaveSettings: document.getElementById('btn-save-settings'),
       btnResetDefault: document.getElementById('btn-reset-default'),
-      btnTestSound: document.getElementById('btn-test-sound'),
+      modal: document.getElementById('settings-modal'),
 
-      // Gemini API 설정 (실시간 지령 생성용)
+      // 모드 및 지령 설정 DOM
+      toggleDirectiveMode: document.getElementById('toggle-directive-mode'),
+      badgeCurrentMode: document.getElementById('badge-current-mode'),
+      cardAiConfig: document.getElementById('card-ai-config'),
+      cardManualConfig: document.getElementById('card-manual-config'),
+      calendarAiNotice: document.getElementById('calendar-ai-notice'),
+
+      // Gemini AI 설정 DOM
       inputGeminiKey: document.getElementById('input-gemini-key'),
-      inputGeminiHint: document.getElementById('input-gemini-hint'),
+      btnToggleKeyVisibility: document.getElementById('btn-toggle-key-visibility'),
+      iconKeyVisibility: document.getElementById('icon-key-visibility'),
+      btnTestGemini: document.getElementById('btn-test-gemini'),
+      aiTestResult: document.getElementById('ai-test-result'),
+      aiStatusIndicator: document.getElementById('ai-status-indicator'),
       selectGeminiModel: document.getElementById('select-gemini-model'),
+      btnRefreshModels: document.getElementById('btn-refresh-models'),
+      modelSelectHint: document.getElementById('model-select-hint'),
+      inputGeminiHint: document.getElementById('input-gemini-hint'),
 
-      // 설정 필드
+      // 인앱 알람 배너 DOM
+      alarmBanner: document.getElementById('alarm-banner'),
+      alarmTimeText: document.getElementById('alarm-time-text'),
+      alarmDescText: document.getElementById('alarm-desc-text'),
+      btnAlarmJump: document.getElementById('btn-alarm-jump'),
+      btnAlarmDismiss: document.getElementById('btn-alarm-dismiss'),
+      toggleAlarm: document.getElementById('toggle-alarm'),
+
+      // 캘린더 동기화 DOM
+      inputIcsUrl: document.getElementById('input-ics-url'),
+      btnSyncNow: document.getElementById('btn-sync-now'),
+      selectAutoSync: document.getElementById('select-auto-sync'),
+
+      // STAGE 수동 메시지 관리 DOM
+      stageCardsContainer: document.getElementById('stage-cards-container'),
+      btnAddStage: document.getElementById('btn-add-stage'),
+      btnLoadSample: document.getElementById('btn-load-sample'),
+      btnClearMessages: document.getElementById('btn-clear-messages'),
+      btnApplyCustom: document.getElementById('btn-apply-custom-messages'),
+      labelCustomStageCount: document.getElementById('label-custom-stage-count'),
+
+      // 화면 및 사운드 설정 DOM
       selectOrientation: document.getElementById('select-orientation'),
       selectDecodeSpeed: document.getElementById('select-decode-speed'),
-      selectSoundType: document.getElementById('select-sound-type'),
-      sliderVolume: document.getElementById('slider-volume'),
-      labelVolume: document.getElementById('label-volume'),
       toggleScanlines: document.getElementById('toggle-scanlines'),
       toggleVignette: document.getElementById('toggle-vignette'),
+      sliderVolume: document.getElementById('slider-volume'),
+      labelVolume: document.getElementById('label-volume'),
+      btnTestSound: document.getElementById('btn-test-sound'),
+      selectSoundType: document.getElementById('select-sound-type'),
+      colorChips: document.querySelectorAll('.color-circle-chip'),
+      btnOpenColorPickerFont: document.getElementById('btn-open-color-picker-font'),
+      btnOpenColorPickerBg: document.getElementById('btn-open-color-picker-bg'),
 
-      // 커스텀 사이버 컬러 모달
+      // 컬러 피커 모달
       colorModal: document.getElementById('custom-color-modal'),
-      colorModalTitle: document.getElementById('color-modal-title'),
       btnCloseColorModal: document.getElementById('btn-close-color-modal'),
       btnCancelColorModal: document.getElementById('btn-cancel-color-modal'),
       btnApplyColorModal: document.getElementById('btn-apply-color-modal'),
-      btnOpenColorPickerFont: document.getElementById('btn-open-color-picker-font'),
-      btnOpenColorPickerBg: document.getElementById('btn-open-color-picker-bg'),
+      colorModalTitle: document.getElementById('color-modal-title'),
       pickerSvBox: document.getElementById('picker-sv-box'),
       pickerSvCursor: document.getElementById('picker-sv-cursor'),
       pickerHueTrack: document.getElementById('picker-hue-track'),
@@ -112,16 +197,41 @@ class PagerApp {
   bindEvents() {
     // 1. 화면 클릭 / 터치로 다음 단계 진행
     this.dom.app.addEventListener('click', (e) => {
-      if (e.target.closest('#btn-open-settings') || !this.dom.modal.classList.contains('hidden')) {
+      if (e.target.closest('#btn-open-settings') || e.target.closest('#alarm-banner') || !this.dom.modal.classList.contains('hidden') || (this.dom.colorModal && !this.dom.colorModal.classList.contains('hidden'))) {
         return;
       }
       this.advance();
     });
 
+    // 1-1. 인앱 알람 배너 액션 버튼
+    if (this.dom.btnAlarmJump) {
+      this.dom.btnAlarmJump.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.pendingAlarmTarget) {
+          this.jumpToMessage(this.pendingAlarmTarget.stageIdx, this.pendingAlarmTarget.msgIdx);
+        } else {
+          this.dismissAlarmBanner();
+        }
+      });
+    }
+
+    if (this.dom.btnAlarmDismiss) {
+      this.dom.btnAlarmDismiss.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.dismissAlarmBanner();
+      });
+    }
+
     // 2. 키보드 단축키
     window.addEventListener('keydown', (e) => {
-      if (!this.dom.modal.classList.contains('hidden')) {
-        if (e.key === 'Escape') this.closeModal();
+      if (!this.dom.modal.classList.contains('hidden') || (this.dom.colorModal && !this.dom.colorModal.classList.contains('hidden'))) {
+        if (e.key === 'Escape') {
+          if (this.dom.colorModal && !this.dom.colorModal.classList.contains('hidden')) {
+            this.closeColorModal();
+          } else {
+            this.closeModal();
+          }
+        }
         return;
       }
 
@@ -153,135 +263,225 @@ class PagerApp {
         this.dom.tabBtns.forEach(b => b.classList.remove('active'));
         this.dom.tabPanes.forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById(btn.dataset.tab).classList.add('active');
+        const targetPane = document.getElementById(btn.dataset.tab);
+        if (targetPane) targetPane.classList.add('active');
       });
     });
 
-    // 6. 볼륨 슬라이더 및 사운드 설정
-    this.dom.sliderVolume.addEventListener('input', (e) => {
-      this.dom.labelVolume.textContent = `${e.target.value}%`;
-    });
-    this.dom.sliderVolume.addEventListener('change', (e) => {
-      this.saveConfig({ volume: parseInt(e.target.value, 10) });
-    });
+    // 4-1. 지령 발급 모드 토글 (AI 실시간 vs 수동/캘린더)
+    if (this.dom.toggleDirectiveMode) {
+      this.dom.toggleDirectiveMode.addEventListener('change', (e) => {
+        const isAi = e.target.checked;
+        this.config.directive_mode = isAi ? 'ai' : 'manual';
+        this.saveConfig({ directive_mode: this.config.directive_mode });
+        this.updateDirectiveModeUI(isAi);
+        this.updateDisplay();
+        this.showToast(isAi ? "AI 실시간 지령 생성 모드가 활성화되었습니다." : "수동 / 캘린더 모드가 활성화되었습니다.");
+      });
+    }
 
-    this.dom.selectSoundType.addEventListener('change', (e) => {
-      this.saveConfig({ sound_type: e.target.value });
-    });
-
-    this.dom.btnTestSound.addEventListener('click', () => {
-      const vol = parseInt(this.dom.sliderVolume.value, 10);
-      const soundType = this.dom.selectSoundType.value;
-      if (soundType === 'synth') {
-        this.playSynthBeep(vol / 100.0);
-      } else {
-        this.playBeep(vol);
-      }
-    });
-
-    // 7. 실시간 글자/배경 색상 프리셋 원형 칩 클릭 (클릭 즉시 자동 저장)
-    document.querySelectorAll('.color-circle-chip[data-color]').forEach(chip => {
-      chip.addEventListener('click', (e) => {
-        const type = e.currentTarget.dataset.type;
-        const color = e.currentTarget.dataset.color;
-        if (type === 'font') {
-          this.config.font_color = color;
-          this.applyCustomColors(color, this.config.bg_color || '#000000');
-          this.saveConfig({ font_color: color });
-        } else if (type === 'bg') {
-          this.config.bg_color = color;
-          this.applyCustomColors(this.config.font_color || '#2FBFFC', color);
-          this.saveConfig({ bg_color: color });
+    // 4-2. Gemini API Key 변경 및 비밀번호 보기/숨기기 토글
+    if (this.dom.btnToggleKeyVisibility && this.dom.inputGeminiKey) {
+      this.dom.btnToggleKeyVisibility.addEventListener('click', () => {
+        const isPassword = this.dom.inputGeminiKey.type === 'password';
+        this.dom.inputGeminiKey.type = isPassword ? 'text' : 'password';
+        if (this.dom.iconKeyVisibility) {
+          this.dom.iconKeyVisibility.textContent = isPassword ? '🔒' : '👁';
         }
-        this.showToast(`색상이 저장되었습니다: ${color}`);
-      });
-    });
-
-    // 8. 맨 마지막 무지개 원형 칩 클릭 시 커스텀 팝업 열기
-    if (this.dom.btnOpenColorPickerFont) {
-      this.dom.btnOpenColorPickerFont.addEventListener('click', () => {
-        this.openCustomColorModal('font');
-      });
-    }
-    if (this.dom.btnOpenColorPickerBg) {
-      this.dom.btnOpenColorPickerBg.addEventListener('click', () => {
-        this.openCustomColorModal('bg');
       });
     }
 
-    // 9. 화면 방향 변경 (즉시 자동 저장)
+    if (this.dom.inputGeminiKey) {
+      const handleKeyUpdate = (e) => {
+        const key = e.target.value.trim();
+        this.config.gemini_api_key = key;
+        this.saveConfig({ gemini_api_key: key });
+        this.updateModelSelectState();
+        if (key.length > 15) {
+          this.fetchAvailableModels(key);
+        }
+      };
+      this.dom.inputGeminiKey.addEventListener('change', handleKeyUpdate);
+      this.dom.inputGeminiKey.addEventListener('input', (e) => {
+        clearTimeout(this._keyDebounce);
+        this._keyDebounce = setTimeout(() => handleKeyUpdate(e), 500);
+      });
+    }
+
+    // 4-3. Gemini API 연결 테스트 버튼
+    if (this.dom.btnTestGemini) {
+      this.dom.btnTestGemini.addEventListener('click', () => {
+        this.testGeminiConnection();
+      });
+    }
+
+    // 4-4. Gemini 모델 변경
+    if (this.dom.selectGeminiModel) {
+      this.dom.selectGeminiModel.addEventListener('change', (e) => {
+        this.config.gemini_model = e.target.value;
+        this.saveConfig({ gemini_model: e.target.value });
+      });
+    }
+
+    // 4-5. Gemini 모델 목록 새로고침
+    if (this.dom.btnRefreshModels) {
+      this.dom.btnRefreshModels.addEventListener('click', async () => {
+        const key = (this.config.gemini_api_key || '').trim();
+        if (!key || key.length < 10) {
+          this.showToast("API 키를 먼저 입력해주세요.");
+          return;
+        }
+        this.dom.btnRefreshModels.disabled = true;
+        this.dom.btnRefreshModels.textContent = "조회 중...";
+        await this.fetchAvailableModels(key);
+        this.dom.btnRefreshModels.disabled = false;
+        this.dom.btnRefreshModels.textContent = "목록 새로고침 ↻";
+        this.showToast("지원되는 모델 목록을 새로고침했습니다.");
+      });
+    }
+
+    // 4-6. Gemini 상황 힌트 입력
+    if (this.dom.inputGeminiHint) {
+      this.dom.inputGeminiHint.addEventListener('change', (e) => {
+        this.config.gemini_hint = e.target.value.trim();
+        this.saveConfig({ gemini_hint: this.config.gemini_hint });
+      });
+    }
+
+    // 5. 화면 방향 즉시 적용
     this.dom.selectOrientation.addEventListener('change', (e) => {
       this.applyOrientation(e.target.value);
       this.saveConfig({ orientation: e.target.value });
-      this.showToast("화면 방향 설정이 저장되었습니다.");
     });
 
-    // 10. CRT 스캔라인 & 비네팅 토글 시 실시간 미니 프리뷰 업데이트 및 자동 저장
+    // 6. 볼륨 슬라이더
+    this.dom.sliderVolume.addEventListener('input', (e) => {
+      this.dom.labelVolume.textContent = `${e.target.value}%`;
+      this.config.volume = parseInt(e.target.value, 10);
+      this.saveConfig({ volume: this.config.volume });
+    });
+
+    // 7. 사운드 테스트
+    this.dom.btnTestSound.addEventListener('click', () => {
+      this.playBeepSound();
+    });
+
+    // 8. 캘린더 수동 동기화
+    this.dom.btnSyncNow.addEventListener('click', () => {
+      const url = this.dom.inputIcsUrl.value.trim();
+      if (!url) {
+        this.showToast("iCal 주소를 입력해주세요.");
+        return;
+      }
+      this.syncCalendar(url, false);
+    });
+
+    // 9. 설정 저장
+    this.dom.btnSaveSettings.addEventListener('click', () => {
+      this.saveSettingsFromModal();
+    });
+
+    // 10. 기본값 초기화
+    this.dom.btnResetDefault.addEventListener('click', () => {
+      this.resetToDefaults();
+    });
+
+    // 11. 원클릭 색상 프리셋 칩 클릭 (자동 저장 적용)
+    this.dom.colorChips.forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        const type = e.target.dataset.type;
+        const color = e.target.dataset.color;
+        if (!type || !color) return;
+
+        if (type === 'font') {
+          this.config.font_color = color;
+          this.applyCustomColors(color, this.config.bg_color);
+          this.saveConfig({ font_color: color });
+        } else if (type === 'bg') {
+          this.config.bg_color = color;
+          this.applyCustomColors(this.config.font_color, color);
+          this.saveConfig({ bg_color: color });
+        }
+      });
+    });
+
+    // 12. CRT 스캔라인 & 비네팅 토글 (자동 저장 적용)
     if (this.dom.toggleScanlines) {
       this.dom.toggleScanlines.addEventListener('change', (e) => {
+        this.config.scanlines = e.target.checked;
+        if (this.dom.crtOverlay) {
+          this.dom.crtOverlay.style.display = e.target.checked ? 'block' : 'none';
+        }
         this.updateMiniCrtPreview();
         this.saveConfig({ scanlines: e.target.checked });
       });
     }
+
     if (this.dom.toggleVignette) {
       this.dom.toggleVignette.addEventListener('change', (e) => {
+        this.config.vignette = e.target.checked;
+        if (this.dom.crtVignette) {
+          this.dom.crtVignette.style.display = e.target.checked ? 'block' : 'none';
+        }
         this.updateMiniCrtPreview();
         this.saveConfig({ vignette: e.target.checked });
       });
     }
 
-    // 디코드 속도 자동 저장
-    this.dom.selectDecodeSpeed.addEventListener('change', (e) => {
-      this.saveConfig({ decode_speed: e.target.value });
+    // 12-1. 일정 알람 토글
+    if (this.dom.toggleAlarm) {
+      this.dom.toggleAlarm.addEventListener('change', (e) => {
+        this.config.alarm_enabled = e.target.checked;
+        this.saveConfig({ alarm_enabled: e.target.checked });
+        this.scheduleAlarms();
+      });
+    }
+
+    // 13. STAGE 동적 제어 버튼
+    this.dom.btnAddStage.addEventListener('click', () => {
+      this.syncCustomBufferFromDOM();
+      const newStageNum = this.customStages.length + 1;
+      this.customStages.push({
+        stage: newStageNum,
+        messages: [{ text: `새로운 지령 메시지`, time_info: "" }]
+      });
+      this.renderCustomStageCards();
+      this.showToast(`STAGE ${newStageNum} 추가됨`);
     });
 
-    // Gemini API 설정 실시간 반응 및 모델 자동 탐색
-    if (this.dom.inputGeminiKey) {
-      this.dom.inputGeminiKey.addEventListener('change', (e) => {
-        const key = e.target.value.trim();
-        this.saveConfig({ gemini_api_key: key });
-        if (key.length > 10) {
-          this.fetchAvailableModels(key);
-        }
-      });
+    this.dom.btnLoadSample.addEventListener('click', () => {
+      if (confirm("기본 예시 STAGE로 덮어쓰시겠습니까?")) {
+        this.customStages = JSON.parse(JSON.stringify(DEFAULT_MESSAGES));
+        this.renderCustomStageCards();
+        this.showToast("기본 예시 불러오기 완료");
+      }
+    });
 
-      let keyDebounceTimer = null;
-      this.dom.inputGeminiKey.addEventListener('input', (e) => {
-        clearTimeout(keyDebounceTimer);
-        const key = e.target.value.trim();
-        if (key.length > 15) {
-          keyDebounceTimer = setTimeout(() => {
-            this.saveConfig({ gemini_api_key: key });
-            this.fetchAvailableModels(key);
-          }, 600);
-        }
-      });
-    }
+    this.dom.btnClearMessages.addEventListener('click', () => {
+      if (confirm("모든 STAGE 메시지를 비우시겠습니까?")) {
+        this.customStages = [{
+          stage: 1,
+          messages: [{ text: "", time_info: "" }]
+        }];
+        this.renderCustomStageCards();
+        this.showToast("STAGE가 비워졌습니다.");
+      }
+    });
 
-    if (this.dom.inputGeminiHint) {
-      this.dom.inputGeminiHint.addEventListener('change', (e) => {
-        this.saveConfig({ gemini_hint: e.target.value.trim() });
-      });
-    }
-
-    if (this.dom.selectGeminiModel) {
-      this.dom.selectGeminiModel.addEventListener('change', (e) => {
-        this.config.gemini_model = e.target.value;
-        this.saveConfig({ gemini_model: e.target.value });
-        this.showToast(`모델 설정 완료: ${e.target.value}`);
-      });
-    }
-
-    // 11. 설정 저장 및 기본값 복원
-    this.dom.btnSaveSettings.addEventListener('click', () => this.saveSettingsFromModal());
-    this.dom.btnResetDefault.addEventListener('click', () => this.resetDefaults());
+    // 14. 작성된 STAGE 삐삐 적용
+    this.dom.btnApplyCustom.addEventListener('click', () => this.applyCustomStages());
   }
 
   // ── 설정 로드 및 저장 ──
   loadConfig() {
     try {
       const stored = localStorage.getItem('limbus_beep_config');
-      return stored ? { ...DEFAULT_CONFIG, ...JSON.parse(stored) } : { ...DEFAULT_CONFIG };
+      const parsed = stored ? JSON.parse(stored) : {};
+      const config = { ...DEFAULT_CONFIG, ...parsed };
+      if (!parsed.directive_mode) {
+        config.directive_mode = (config.gemini_api_key && config.gemini_api_key.trim().length > 10) ? 'ai' : 'manual';
+      }
+      return config;
     } catch {
       return { ...DEFAULT_CONFIG };
     }
@@ -291,6 +491,26 @@ class PagerApp {
     this.config = { ...this.config, ...newConfig };
     localStorage.setItem('limbus_beep_config', JSON.stringify(this.config));
     this.applySettings();
+  }
+
+  loadStoredMessages() {
+    try {
+      const stored = localStorage.getItem('limbus_beep_messages');
+      return stored ? JSON.parse(stored) : DEFAULT_MESSAGES;
+    } catch {
+      return DEFAULT_MESSAGES;
+    }
+  }
+
+  saveStoredMessages(messages) {
+    this.messages = messages;
+    this.customStages = JSON.parse(JSON.stringify(messages));
+    localStorage.setItem('limbus_beep_messages', JSON.stringify(messages));
+    this.currentStageIdx = 0;
+    this.currentMsgIdx = 0;
+    this.updateDisplay();
+    this.renderCustomStageCards();
+    this.scheduleAlarms();
   }
 
   applyCustomColors(fontColor, bgColor) {
@@ -305,7 +525,6 @@ class PagerApp {
     document.body.style.backgroundColor = bc;
     if (this.dom.app) this.dom.app.style.backgroundColor = bc;
 
-    // 모달 내 실시간 미니 프리뷰 스크린 & Hex 태그 연동
     const miniPreview = document.getElementById('theme-mini-preview');
     const miniText = document.getElementById('mini-preview-text');
     const tagFontHex = document.getElementById('tag-font-hex');
@@ -319,7 +538,6 @@ class PagerApp {
     if (tagFontHex) tagFontHex.textContent = fc;
     if (tagBgHex) tagBgHex.textContent = bc;
 
-    // 글자 색상 원형 칩 활성화 상태 표시
     let fontPresetMatched = false;
     document.querySelectorAll('.color-circle-chip[data-type="font"][data-color]').forEach(chip => {
       const isMatch = chip.dataset.color.toUpperCase() === fc;
@@ -330,7 +548,6 @@ class PagerApp {
       this.dom.btnOpenColorPickerFont.classList.toggle('active', !fontPresetMatched);
     }
 
-    // 배경 색상 원형 칩 활성화 상태 표시
     let bgPresetMatched = false;
     document.querySelectorAll('.color-circle-chip[data-type="bg"][data-color]').forEach(chip => {
       const isMatch = chip.dataset.color.toUpperCase() === bc;
@@ -362,11 +579,9 @@ class PagerApp {
 
   applyOrientation(mode) {
     const targetMode = mode || this.config.orientation || 'landscape';
-    // 1. Android Native Bridge 호출
     if (window.AndroidBridge && typeof window.AndroidBridge.setOrientation === 'function') {
       window.AndroidBridge.setOrientation(targetMode);
     }
-    // 2. Web Screen Orientation API
     try {
       if (screen.orientation && screen.orientation.lock) {
         if (targetMode === 'landscape') screen.orientation.lock('landscape').catch(() => {});
@@ -385,63 +600,221 @@ class PagerApp {
     }
     this.applyCustomColors(this.config.font_color, this.config.bg_color);
     this.applyOrientation(this.config.orientation || 'landscape');
+    this.scheduleAlarms();
   }
 
-  // ── 오디오 재생 ──
-  playBeep(volumePercent = null) {
-    const vol = (volumePercent !== null ? volumePercent : this.config.volume) / 100.0;
-    if (vol <= 0) return;
+  // ── 일정 알람 스케줄링 & 감시 엔진 ──
+  getTodayKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  }
 
-    if (this.config.sound_type === 'synth') {
-      this.playSynthBeep(vol);
+  loadFiredAlarms(todayKey) {
+    try {
+      const stored = localStorage.getItem(`limbus_fired_alarms_${todayKey}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  saveFiredAlarms(todayKey) {
+    try {
+      localStorage.setItem(`limbus_fired_alarms_${todayKey}`, JSON.stringify(Array.from(this.firedAlarms)));
+    } catch {}
+  }
+
+  scheduleAlarms() {
+    const isEnabled = this.config.alarm_enabled !== false;
+    if (!isEnabled) {
+      if (window.AndroidBridge && typeof window.AndroidBridge.cancelAllAlarms === 'function') {
+        window.AndroidBridge.cancelAllAlarms();
+      }
       return;
     }
 
-    try {
-      this.dom.audio.volume = vol;
-      this.dom.audio.currentTime = 0;
-      const playPromise = this.dom.audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => this.playSynthBeep(vol));
+    const now = new Date();
+    const alarmsList = [];
+
+    this.messages.forEach((stage, sIdx) => {
+      if (!stage.messages) return;
+      stage.messages.forEach((msg, mIdx) => {
+        const match = (msg.time_info || '').match(/\b(\d{1,2}):(\d{2})\b/);
+        if (!match) return;
+
+        const hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const triggerDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+
+        if (triggerDate.getTime() > now.getTime()) {
+          alarmsList.push({
+            id: alarmsList.length + 1,
+            title: "단테 삐삐 일정 알람",
+            message: msg.text,
+            time: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+            triggerAtMillis: triggerDate.getTime()
+          });
+        }
+      });
+    });
+
+    if (window.AndroidBridge && typeof window.AndroidBridge.scheduleAlarms === 'function') {
+      try {
+        window.AndroidBridge.scheduleAlarms(JSON.stringify(alarmsList));
+      } catch (err) {
+        console.error("Alarm scheduling error:", err);
       }
-    } catch {
-      this.playSynthBeep(vol);
     }
   }
 
-  playSynthBeep(vol) {
+  startAlarmWatcher() {
+    setInterval(() => {
+      this.checkAlarms();
+    }, 10000);
+  }
+
+  checkAlarms() {
+    if (this.config.alarm_enabled === false) return;
+    if (this.config.directive_mode === 'ai') return; // AI 모드일 때는 수동 메시지 알람 비활성화
+
+    const now = new Date();
+    const currentHours = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const todayKey = this.getTodayKey();
+
+    if (todayKey !== this.todayKey) {
+      this.todayKey = todayKey;
+      this.firedAlarms = this.loadFiredAlarms(todayKey);
+    }
+
+    this.messages.forEach((stage, sIdx) => {
+      if (!stage.messages) return;
+      stage.messages.forEach((msg, mIdx) => {
+        const match = (msg.time_info || '').match(/\b(\d{1,2}):(\d{2})\b/);
+        if (!match) return;
+
+        const hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+
+        if (currentHours === hours && currentMinutes === minutes) {
+          const alarmKey = `${todayKey}_${sIdx}_${mIdx}_${hours}:${minutes}`;
+          if (!this.firedAlarms.has(alarmKey)) {
+            this.firedAlarms.add(alarmKey);
+            this.saveFiredAlarms(todayKey);
+            this.triggerInAppAlarm(msg.time_info, msg.text, sIdx, mIdx);
+          }
+        }
+      });
+    });
+  }
+
+  triggerInAppAlarm(timeStr, descStr, stageIdx, msgIdx) {
+    this.playBeepSound();
+    
+    if (navigator.vibrate) {
+      try { navigator.vibrate([200, 100, 200]); } catch (e) {}
+    }
+
+    if (this.dom.alarmBanner) {
+      this.pendingAlarmTarget = { stageIdx, msgIdx };
+      this.dom.alarmTimeText.textContent = timeStr || "알람";
+      this.dom.alarmDescText.textContent = descStr || "등록된 일정 시간입니다.";
+      this.dom.alarmBanner.classList.remove('hidden');
+
+      if (this.alarmBannerTimer) clearTimeout(this.alarmBannerTimer);
+      this.alarmBannerTimer = setTimeout(() => {
+        this.dismissAlarmBanner();
+      }, 15000);
+    }
+  }
+
+  jumpToMessage(stageIdx, msgIdx) {
+    this.dismissAlarmBanner();
+    this.currentStageIdx = stageIdx;
+    this.currentMsgIdx = msgIdx;
+    this.startBeeping();
+  }
+
+  dismissAlarmBanner() {
+    if (this.dom.alarmBanner) {
+      this.dom.alarmBanner.classList.add('hidden');
+    }
+    this.pendingAlarmTarget = null;
+    if (this.alarmBannerTimer) {
+      clearTimeout(this.alarmBannerTimer);
+      this.alarmBannerTimer = null;
+    }
+  }
+
+  // ── 오디오 재생 ──
+  playBeepSound() {
+    const vol = (this.config.volume || 80) / 100;
+    if (vol <= 0) return;
+
+    if (this.config.sound_type === 'synth') {
+      this.playSynthTone(vol);
+    } else {
+      if (this.dom.audio) {
+        this.dom.audio.volume = vol;
+        this.dom.audio.currentTime = 0;
+        this.dom.audio.play().catch(() => {
+          this.playSynthTone(vol);
+        });
+      } else {
+        this.playSynthTone(vol);
+      }
+    }
+  }
+
+  playSynthTone(vol) {
     try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!this.audioCtx) this.audioCtx = new AudioContext();
-      if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+      if (!this.audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) this.audioCtx = new AudioContext();
+      }
+      if (!this.audioCtx) return;
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
 
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
 
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1000, this.audioCtx.currentTime);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(880, this.audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, this.audioCtx.currentTime + 0.15);
 
-      gain.gain.setValueAtTime(vol * 0.35, this.audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 1.2);
+      gain.gain.setValueAtTime(vol * 0.4, this.audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.2);
 
       osc.connect(gain);
       gain.connect(this.audioCtx.destination);
 
       osc.start();
-      osc.stop(this.audioCtx.currentTime + 1.2);
-    } catch (e) {
-      console.warn("오디오 재생 실패:", e);
-    }
+      osc.stop(this.audioCtx.currentTime + 0.2);
+    } catch (e) {}
   }
 
   // ── 데이터 헬퍼 ──
   truncateText(text, maxLen = 30) {
     if (!text) return "";
-    const str = String(text).trim();
-    if (str.length > maxLen) {
-      return str.substring(0, maxLen).trim() + "...";
-    }
-    return str;
+    return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
+  }
+
+  getCurrentStage() {
+    if (!this.messages || this.messages.length === 0) return null;
+    return this.messages[this.currentStageIdx] || this.messages[0];
+  }
+
+  getCurrentMessage() {
+    const stage = this.getCurrentStage();
+    if (!stage || !stage.messages) return null;
+    const msg = stage.messages[this.currentMsgIdx] || null;
+    if (!msg) return null;
+    return {
+      ...msg,
+      text: this.truncateText(msg.text, 30)
+    };
   }
 
   getRandomCipher(len = 10) {
@@ -453,188 +826,328 @@ class PagerApp {
   }
 
   // ── 상태 머신 컨트롤 ──
-  // 터치할 때마다: IDLE → (Gemini 호출) BEEPING → DECODING → REVEALED → (다시 터치) BEEPING(새 지령) → ...
   advance() {
-    if (this.state === STATE.IDLE) {
-      if (!this.config.gemini_api_key || !this.config.gemini_api_key.trim()) {
+    this.clearTimers();
+
+    if (this.config.directive_mode === 'ai') {
+      // ── AI 실시간 생성 모드 ──
+      const apiKey = (this.config.gemini_api_key || "").trim();
+      if (!apiKey || apiKey.length < 10) {
         this.showToast("설정에서 Gemini API 키를 먼저 입력해주세요.");
         this.openModal();
         return;
       }
-      this.clearTimers();
-      this.startBeeping();
-    } else if (this.state === STATE.BEEPING) {
-      // AI 응답 대기 중에는 중복 호출을 막기 위해 터치를 무시한다.
-    } else if (this.state === STATE.DECODING) {
-      this.clearTimers();
-      this.startRevealed();
-    } else if (this.state === STATE.REVEALED) {
-      this.clearTimers();
-      this.startBeeping();
+
+      if (this.state === STATE.IDLE || this.state === STATE.REVEALED || this.state === STATE.CLEAR || this.state === STATE.COMPLETE) {
+        this.startAiBeeping();
+      } else if (this.state === STATE.BEEPING) {
+        // AI 응답 대기 중
+      } else if (this.state === STATE.DECODING) {
+        if (this.pendingAiMessage) {
+          this.startAiRevealed(this.pendingAiMessage);
+        }
+      }
+    } else {
+      // ── 수동 / 캘린더 모드 (기존 STAGE 순차 진행) ──
+      if (this.state === STATE.IDLE) {
+        this.currentMsgIdx = 0;
+        this.startBeeping();
+      } else if (this.state === STATE.BEEPING) {
+        this.startDecoding();
+      } else if (this.state === STATE.DECODING) {
+        this.startRevealed();
+      } else if (this.state === STATE.REVEALED) {
+        const stage = this.getCurrentStage();
+        if (stage && this.currentMsgIdx + 1 < stage.messages.length) {
+          this.currentMsgIdx++;
+          this.startBeeping();
+        } else {
+          const isLastStage = (this.currentStageIdx + 1 >= this.messages.length);
+          if (isLastStage) {
+            this.startComplete();
+          } else {
+            this.startClear();
+          }
+        }
+      } else if (this.state === STATE.CLEAR) {
+        this.currentStageIdx++;
+        this.currentMsgIdx = 0;
+        this.startBeeping();
+      } else if (this.state === STATE.COMPLETE) {
+        this.currentStageIdx = 0;
+        this.currentMsgIdx = 0;
+        this.startIdle();
+      }
     }
   }
 
   replay() {
-    if (this.state === STATE.BEEPING) return;
     this.clearTimers();
-    this.startBeeping();
+    if (this.config.directive_mode === 'ai') {
+      if (this.pendingAiMessage) {
+        this.startAiDecoding(this.pendingAiMessage);
+      } else {
+        this.startAiBeeping();
+      }
+    } else {
+      if (this.state === STATE.REVEALED || this.state === STATE.DECODING) {
+        this.startDecoding();
+      } else {
+        this.startBeeping();
+      }
+    }
   }
 
   clearTimers() {
-    if (this.animInterval) clearInterval(this.animInterval);
-    if (this.beepTimeout) clearTimeout(this.beepTimeout);
-    this.animInterval = null;
-    this.beepTimeout = null;
+    if (this.animInterval) {
+      clearInterval(this.animInterval);
+      this.animInterval = null;
+    }
+    if (this.beepTimeout) {
+      clearTimeout(this.beepTimeout);
+      this.beepTimeout = null;
+    }
   }
 
-  // ── 상태 1: BEEPING (동시에 Gemini API로 새 지령을 실시간 생성) ──
-  startBeeping() {
+  // ── 상태 0: IDLE ──
+  startIdle() {
+    this.state = STATE.IDLE;
+    this.clearTimers();
+    this.updateDisplay();
+  }
+
+  // ── AI 모드 상태 제어 ──
+  startAiBeeping() {
     this.state = STATE.BEEPING;
-    this.playBeep();
+    this.clearTimers();
+    this.playBeepSound();
 
-    this.dom.progressBar.classList.remove('visible');
-    this.dom.displayTime.classList.remove('visible');
-    this.dom.displayMain.className = 'main-text dimmed';
     this.dom.displaySubLabel.textContent = "지령 수신 중...";
+    this.dom.displayTime.classList.remove('visible');
+    this.dom.progressBar.classList.remove('visible');
+    this.dom.displayMain.className = 'main-text dimmed';
 
-    let dotStep = 0;
+    let dots = 0;
+    this.dom.displayDots.textContent = "";
     this.animInterval = setInterval(() => {
-      dotStep = (dotStep + 1) % 4;
-      const dots = "• ".repeat(dotStep) + "◦ ".repeat(3 - dotStep);
-      this.dom.displayDots.textContent = dots;
-      this.dom.displayMain.textContent = this.getRandomCipher(11);
-    }, 100);
+      dots = (dots + 1) % 5;
+      this.dom.displayDots.textContent = "•".repeat(dots);
+      this.dom.displayMain.textContent = this.getRandomCipher(12);
+    }, 150);
 
-    // 최소 대기 시간(비프 연출)과 Gemini 응답을 동시에 기다린 뒤 디코딩으로 넘어간다.
-    const minWait = new Promise((resolve) => {
-      this.beepTimeout = setTimeout(resolve, 1100);
-    });
+    const minDur = (this.config.decode_speed === 'fast') ? 800 : (this.config.decode_speed === 'slow') ? 1800 : 1200;
+    const minWaitPromise = new Promise(resolve => setTimeout(resolve, minDur));
     const fetchPromise = this.generateGeminiMessage(this.config.gemini_hint);
 
-    Promise.all([minWait, fetchPromise]).then(([, text]) => {
-      if (this.state !== STATE.BEEPING) return; // 대기 중 사용자가 다른 조작을 했으면 무시
-      this.pendingMessageText = text;
-      this.startDecoding();
-    }).catch((err) => {
-      if (this.state !== STATE.BEEPING) return;
-      console.error("AI 지령 생성 실패:", err);
-      this.showGenerationError(err && err.message ? err.message : "AI 지령을 받아오지 못했습니다.");
-    });
+    Promise.all([minWaitPromise, fetchPromise])
+      .then(([_, directiveText]) => {
+        if (this.state !== STATE.BEEPING) return;
+        this.pendingAiMessage = directiveText;
+        this.startAiDecoding(directiveText);
+      })
+      .catch((err) => {
+        if (this.state !== STATE.BEEPING) return;
+        this.clearTimers();
+        this.dom.displayDots.textContent = "";
+        this.dom.displaySubLabel.textContent = "지령 수신 실패";
+        this.dom.displayMain.textContent = "통신 에러 // 터치하여 재시도";
+        this.dom.displayMain.className = 'main-text amber';
+        this.state = STATE.IDLE;
+        this.showToast(err.message || "Gemini 지령 생성에 실패했습니다.");
+      });
   }
 
-  // Gemini 호출 실패 시 화면에 에러를 표시하고 IDLE로 되돌린다.
-  showGenerationError(message) {
-    this.clearTimers();
-    this.state = STATE.IDLE;
-    this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
-    this.dom.displayTime.classList.remove('visible');
-    this.dom.progressBar.classList.remove('visible');
-    this.dom.displayMain.textContent = "_SIGNAL LOST_";
-    this.dom.displayMain.className = 'main-text amber';
-    this.showToast(message);
-  }
-
-  // ── 상태 2: DECODING ──
-  startDecoding() {
-    this.clearTimers();
+  startAiDecoding(targetText) {
     this.state = STATE.DECODING;
+    this.clearTimers();
 
-    const targetText = this.pendingMessageText || "";
-    if (!targetText) {
-      this.updateDisplayIdle();
-      return;
-    }
-
-    this.dom.displayDots.textContent = "• • •";
-    this.dom.displaySubLabel.textContent = "▼ 데이터 복호화 진행 중... ▼";
+    this.dom.displayDots.textContent = "";
+    this.dom.displaySubLabel.textContent = "지령 수신 중... // DECRYPTING";
     this.dom.progressBar.classList.add('visible');
     this.dom.displayTime.classList.remove('visible');
 
-    let durations = { fast: 500, normal: 900, slow: 1500 };
-    let totalTime = durations[this.config.decode_speed] || 900;
-    let steps = 18;
-    let stepTime = totalTime / steps;
+    const totalSteps = (this.config.decode_speed === 'fast') ? 8 : (this.config.decode_speed === 'slow') ? 18 : 12;
     let currentStep = 0;
 
     this.animInterval = setInterval(() => {
       currentStep++;
-      const progress = Math.min(1.0, currentStep / steps);
+      const progress = currentStep / totalSteps;
+      const revealedLength = Math.floor(targetText.length * progress);
+      const revealedPart = targetText.slice(0, revealedLength);
+      const cipherPart = this.getRandomCipher(Math.max(0, targetText.length - revealedLength));
+
+      this.dom.displayMain.textContent = revealedPart + cipherPart;
+      this.dom.displayMain.className = (progress > 0.6) ? 'main-text accent' : 'main-text dimmed';
       this.dom.progressFill.style.width = `${progress * 100}%`;
 
-      const revealedCount = Math.floor(targetText.length * progress);
-      let frame = "";
-      for (let i = 0; i < targetText.length; i++) {
-        if (i < revealedCount) {
-          frame += targetText[i];
-        } else {
-          frame += (targetText[i] === ' ') ? ' ' : CIPHER_CHARS[Math.floor(Math.random() * CIPHER_CHARS.length)];
-        }
+      if (currentStep >= totalSteps) {
+        clearInterval(this.animInterval);
+        this.startAiRevealed(targetText);
       }
-      this.dom.displayMain.textContent = frame;
-      this.dom.displayMain.className = (progress > 0.6) ? 'main-text accent' : 'main-text dimmed';
+    }, (this.config.decode_speed === 'fast') ? 40 : (this.config.decode_speed === 'slow') ? 90 : 60);
+  }
 
-      if (currentStep >= steps) {
-        this.clearTimers();
+  startAiRevealed(targetText) {
+    this.state = STATE.REVEALED;
+    this.clearTimers();
+
+    this.dom.progressBar.classList.remove('visible');
+    this.dom.displayDots.textContent = "";
+    this.dom.displaySubLabel.textContent = "지령 수신 완료";
+    this.dom.displayMain.textContent = targetText;
+    this.dom.displayMain.className = 'main-text accent';
+    this.dom.displayTime.classList.remove('visible');
+  }
+
+  // ── 수동 / 캘린더 모드 상태 1: BEEPING ──
+  startBeeping() {
+    this.state = STATE.BEEPING;
+    this.clearTimers();
+    this.playBeepSound();
+
+    const stage = this.getCurrentStage();
+    const stageNum = stage ? stage.stage : 1;
+    const msg = this.getCurrentMessage();
+    const targetText = msg ? msg.text : "NO DATA";
+
+    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // BEEPING...`;
+    this.dom.displayTime.classList.remove('visible');
+    this.dom.progressBar.classList.remove('visible');
+    this.dom.displayMain.className = 'main-text dimmed';
+
+    let dots = 0;
+    this.dom.displayDots.textContent = "";
+    this.animInterval = setInterval(() => {
+      dots = (dots + 1) % 5;
+      this.dom.displayDots.textContent = "•".repeat(dots);
+      this.dom.displayMain.textContent = this.getRandomCipher(Math.min(targetText.length, 12));
+    }, 150);
+
+    const beepDur = (this.config.decode_speed === 'fast') ? 1000 : (this.config.decode_speed === 'slow') ? 2200 : 1600;
+    this.beepTimeout = setTimeout(() => {
+      this.startDecoding();
+    }, beepDur);
+  }
+
+  // ── 수동 모드 상태 2: DECODING ──
+  startDecoding() {
+    this.state = STATE.DECODING;
+    this.clearTimers();
+
+    const stage = this.getCurrentStage();
+    const stageNum = stage ? stage.stage : 1;
+    const msg = this.getCurrentMessage();
+    const targetText = msg ? msg.text : "NO DATA";
+
+    this.dom.displayDots.textContent = "";
+    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // DECRYPTING...`;
+    this.dom.progressBar.classList.add('visible');
+    this.dom.displayTime.classList.remove('visible');
+
+    const totalSteps = (this.config.decode_speed === 'fast') ? 8 : (this.config.decode_speed === 'slow') ? 20 : 14;
+    let currentStep = 0;
+
+    this.animInterval = setInterval(() => {
+      currentStep++;
+      const progress = currentStep / totalSteps;
+      const revealedLength = Math.floor(targetText.length * progress);
+      const revealedPart = targetText.slice(0, revealedLength);
+      const cipherPart = this.getRandomCipher(targetText.length - revealedLength);
+
+      this.dom.displayMain.textContent = revealedPart + cipherPart;
+      this.dom.displayMain.className = (progress > 0.6) ? 'main-text accent' : 'main-text dimmed';
+      this.dom.progressFill.style.width = `${progress * 100}%`;
+
+      if (currentStep >= totalSteps) {
+        clearInterval(this.animInterval);
         this.startRevealed();
       }
-    }, stepTime);
+    }, (this.config.decode_speed === 'fast') ? 40 : (this.config.decode_speed === 'slow') ? 90 : 60);
   }
 
-  // ── 상태 3: REVEALED ──
+  // ── 수동 모드 상태 3: REVEALED ──
   startRevealed() {
-    this.clearTimers();
     this.state = STATE.REVEALED;
+    this.clearTimers();
 
-    if (!this.pendingMessageText) return;
+    const stage = this.getCurrentStage();
+    const stageNum = stage ? stage.stage : 1;
+    const msg = this.getCurrentMessage();
 
-    this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "터치하면 새 지령을 수신합니다";
     this.dom.progressBar.classList.remove('visible');
-    this.dom.displayTime.classList.remove('visible');
-
-    this.dom.displayMain.textContent = this.pendingMessageText;
+    this.dom.displayDots.textContent = "";
+    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // MESSAGE ${this.currentMsgIdx + 1}/${stage ? stage.messages.length : 1}`;
+    this.dom.displayMain.textContent = msg ? msg.text : "NO DATA";
     this.dom.displayMain.className = 'main-text accent';
+
+    if (msg && msg.time_info) {
+      this.dom.displayTime.textContent = msg.time_info;
+      this.dom.displayTime.classList.add('visible');
+    } else {
+      this.dom.displayTime.classList.remove('visible');
+    }
   }
 
-  updateDisplayIdle() {
+  // ── 수동 모드 상태 4: CLEAR ──
+  startClear() {
+    this.state = STATE.CLEAR;
     this.clearTimers();
-    this.state = STATE.IDLE;
 
-    this.dom.displayDots.textContent = "";
-    this.dom.displaySubLabel.textContent = "";
-    this.dom.displayMain.textContent = "SPACE 를 눌러 시작";
-    this.dom.displayMain.className = 'main-text';
+    const stageNum = this.currentStageIdx + 1;
     this.dom.displayTime.classList.remove('visible');
     this.dom.progressBar.classList.remove('visible');
+    this.dom.displayDots.textContent = "";
+    this.dom.displaySubLabel.textContent = `STAGE ${stageNum} // COMPLETE`;
+    this.dom.displayMain.textContent = "_CLEAR._";
+    this.dom.displayMain.className = 'main-text amber';
+  }
+
+  // ── 수동 모드 상태 5: COMPLETE ──
+  startComplete() {
+    this.state = STATE.COMPLETE;
+    this.clearTimers();
+
+    this.dom.displayTime.classList.remove('visible');
+    this.dom.progressBar.classList.remove('visible');
+    this.dom.displayDots.textContent = "";
+    this.dom.displaySubLabel.textContent = "ALL SCHEDULES COMPLETED";
+    this.dom.displayMain.textContent = "_ALL_CLEAR._";
+    this.dom.displayMain.className = 'main-text amber';
   }
 
   updateDisplay() {
-    this.updateDisplayIdle();
+    if (this.state === STATE.IDLE) {
+      this.dom.displayDots.textContent = "";
+      this.dom.displaySubLabel.textContent = (this.config.directive_mode === 'ai') 
+        ? "GEMINI 실시간 지령 대기" 
+        : `STAGE ${this.currentStageIdx + 1} // READY`;
+      this.dom.displayMain.textContent = "SPACE 또는 터치하여 시작";
+      this.dom.displayMain.className = 'main-text';
+      this.dom.displayTime.classList.remove('visible');
+      this.dom.progressBar.classList.remove('visible');
+    }
   }
 
   // ── 시계 ──
   startClock() {
-    const update = () => {
+    const updateTime = () => {
       const now = new Date();
       const h = String(now.getHours()).padStart(2, '0');
       const m = String(now.getMinutes()).padStart(2, '0');
       const s = String(now.getSeconds()).padStart(2, '0');
-      this.dom.clock.textContent = `${h}:${m}:${s} KST`;
+      if (this.dom.clock) {
+        this.dom.clock.textContent = `${h}:${m}:${s}`;
+      }
     };
-    update();
-    setInterval(update, 1000);
+    updateTime();
+    setInterval(updateTime, 1000);
   }
 
   // ── 설정 모달 열기/닫기 ──
   openModal() {
-    this.dom.selectOrientation.value = this.config.orientation || 'landscape';
-    this.dom.sliderVolume.value = this.config.volume;
-    this.dom.labelVolume.textContent = `${this.config.volume}%`;
-    this.dom.selectDecodeSpeed.value = this.config.decode_speed;
-    this.dom.selectSoundType.value = this.config.sound_type || 'file';
-    this.dom.toggleScanlines.checked = this.config.scanlines;
-    this.dom.toggleVignette.checked = this.config.vignette !== false;
+    const isAi = (this.config.directive_mode === 'ai');
+    this.updateDirectiveModeUI(isAi);
+
     if (this.dom.inputGeminiKey) {
       this.dom.inputGeminiKey.value = this.config.gemini_api_key || '';
     }
@@ -644,10 +1157,34 @@ class PagerApp {
     if (this.dom.selectGeminiModel) {
       this.dom.selectGeminiModel.value = this.config.gemini_model || 'gemini-2.5-flash';
     }
+    if (this.dom.aiTestResult) {
+      this.dom.aiTestResult.textContent = '';
+      this.dom.aiTestResult.className = 'cyber-field-hint';
+    }
+
+    this.dom.selectOrientation.value = this.config.orientation || 'landscape';
+    this.dom.inputIcsUrl.value = this.config.ics_url || '';
+    this.dom.sliderVolume.value = this.config.volume;
+    this.dom.labelVolume.textContent = `${this.config.volume}%`;
+    this.dom.selectAutoSync.value = String(this.config.auto_sync_min);
+    this.dom.selectDecodeSpeed.value = this.config.decode_speed;
+    this.dom.selectSoundType.value = this.config.sound_type || 'file';
+    this.dom.toggleScanlines.checked = this.config.scanlines;
+    this.dom.toggleVignette.checked = this.config.vignette !== false;
+    if (this.dom.toggleAlarm) {
+      this.dom.toggleAlarm.checked = this.config.alarm_enabled !== false;
+    }
+    this.applyCustomColors(this.config.font_color, this.config.bg_color);
+
+    // 수동 STAGE 목록 렌더링
+    this.customStages = JSON.parse(JSON.stringify(this.messages));
+    this.renderCustomStageCards();
+
+    // 모델 상태 갱신 및 유효 키 시 모델 로드
+    this.updateModelSelectState();
     if (this.config.gemini_api_key && this.config.gemini_api_key.trim().length > 10) {
       this.fetchAvailableModels(this.config.gemini_api_key.trim());
     }
-    this.applyCustomColors(this.config.font_color, this.config.bg_color);
 
     this.dom.modal.classList.remove('hidden');
   }
@@ -657,36 +1194,204 @@ class PagerApp {
     this.dom.modal.classList.add('hidden');
   }
 
+  updateDirectiveModeUI(isAi) {
+    if (this.dom.toggleDirectiveMode) {
+      this.dom.toggleDirectiveMode.checked = isAi;
+    }
+    if (this.dom.badgeCurrentMode) {
+      this.dom.badgeCurrentMode.textContent = isAi ? "AI 실시간 생성" : "수동 / 캘린더 모드";
+      this.dom.badgeCurrentMode.className = `mode-state-pill ${isAi ? 'pill-ai' : 'pill-manual'}`;
+    }
+    if (this.dom.cardAiConfig) {
+      this.dom.cardAiConfig.classList.toggle('hidden', !isAi);
+    }
+    if (this.dom.cardManualConfig) {
+      this.dom.cardManualConfig.classList.toggle('hidden', isAi);
+    }
+    if (this.dom.calendarAiNotice) {
+      this.dom.calendarAiNotice.classList.toggle('hidden', !isAi);
+    }
+    this.updateModelSelectState();
+  }
+
+  updateModelSelectState() {
+    const hasKey = !!(this.config.gemini_api_key && this.config.gemini_api_key.trim().length > 10);
+    if (this.dom.selectGeminiModel) {
+      this.dom.selectGeminiModel.disabled = !hasKey;
+    }
+    if (this.dom.btnRefreshModels) {
+      this.dom.btnRefreshModels.disabled = !hasKey;
+    }
+    if (this.dom.modelSelectHint) {
+      if (hasKey) {
+        this.dom.modelSelectHint.textContent = "사용할 모델을 선택하세요. (기본 권장: gemini-2.5-flash)";
+        this.dom.modelSelectHint.className = "cyber-field-hint";
+      } else {
+        this.dom.modelSelectHint.textContent = "API 키를 먼저 입력하고 확인하면 지원되는 모델을 선택할 수 있습니다.";
+        this.dom.modelSelectHint.className = "cyber-field-hint";
+      }
+    }
+    if (this.dom.aiStatusIndicator) {
+      if (hasKey) {
+        this.dom.aiStatusIndicator.textContent = "API 키 등록됨";
+        this.dom.aiStatusIndicator.className = "status-badge-cyber active";
+      } else {
+        this.dom.aiStatusIndicator.textContent = "API 키 대기 중";
+        this.dom.aiStatusIndicator.className = "status-badge-cyber";
+      }
+    }
+  }
+
+  // ── 동적 STAGE 카드 렌더링 (각 메시지가 개별 카드로 분리됨) ──
+  renderCustomStageCards() {
+    if (!this.dom.stageCardsContainer) return;
+    this.dom.stageCardsContainer.innerHTML = '';
+    if (this.dom.labelCustomStageCount) {
+      this.dom.labelCustomStageCount.textContent = `${this.customStages.length} STAGES`;
+    }
+
+    const pillClasses = ['stage-pill-cyan', 'stage-pill-amber', 'stage-pill-green'];
+
+    this.customStages.forEach((stage, sIdx) => {
+      const stageNum = sIdx + 1;
+      const pillClass = pillClasses[sIdx % pillClasses.length];
+      const stageCard = document.createElement('div');
+      stageCard.className = 'stage-edit-card';
+
+      const messages = stage.messages || [];
+
+      let msgCardsHtml = '';
+      messages.forEach((m, mIdx) => {
+        msgCardsHtml += `
+          <div class="msg-card-item" data-sidx="${sIdx}" data-midx="${mIdx}">
+            <div class="msg-card-row">
+              <input type="text" class="msg-time-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.time_info || ''}" placeholder="시간 (예: 09:00 - 10:00)">
+              <button class="btn-del-msg" data-sidx="${sIdx}" data-midx="${mIdx}" title="메시지 삭제">&times;</button>
+            </div>
+            <input type="text" class="msg-text-input" data-sidx="${sIdx}" data-midx="${mIdx}" value="${m.text || ''}" placeholder="메시지 내용 입력">
+          </div>
+        `;
+      });
+
+      stageCard.innerHTML = `
+        <div class="stage-edit-header">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="stage-pill ${pillClass}">STAGE ${stageNum}</span>
+            <span class="stage-sub-hint">메시지 ${messages.length}개</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="btn-add-msg-to-stage btn-sm-text" data-sidx="${sIdx}">+ 메시지 추가</button>
+            ${this.customStages.length > 1 ? `<button class="btn-del-stage" data-sidx="${sIdx}">삭제</button>` : ''}
+          </div>
+        </div>
+        <div class="stage-msg-list" id="stage-msg-list-${sIdx}">
+          ${msgCardsHtml || '<div class="empty-msg-notice">등록된 메시지가 없습니다. [+ 메시지 추가]를 눌러 추가하세요.</div>'}
+        </div>
+      `;
+
+      const delStageBtn = stageCard.querySelector('.btn-del-stage');
+      if (delStageBtn) {
+        delStageBtn.addEventListener('click', (e) => {
+          this.syncCustomBufferFromDOM();
+          const targetIdx = parseInt(e.target.dataset.sidx, 10);
+          this.customStages.splice(targetIdx, 1);
+          this.renderCustomStageCards();
+          this.showToast(`STAGE 삭제됨 (현재 ${this.customStages.length}개)`);
+        });
+      }
+
+      const addMsgBtn = stageCard.querySelector('.btn-add-msg-to-stage');
+      if (addMsgBtn) {
+        addMsgBtn.addEventListener('click', (e) => {
+          this.syncCustomBufferFromDOM();
+          const targetSIdx = parseInt(e.target.dataset.sidx, 10);
+          if (!this.customStages[targetSIdx].messages) this.customStages[targetSIdx].messages = [];
+          this.customStages[targetSIdx].messages.push({ text: `새 메시지`, time_info: "" });
+          this.renderCustomStageCards();
+        });
+      }
+
+      stageCard.querySelectorAll('.btn-del-msg').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          this.syncCustomBufferFromDOM();
+          const sIdx = parseInt(e.target.dataset.sidx, 10);
+          const mIdx = parseInt(e.target.dataset.midx, 10);
+          this.customStages[sIdx].messages.splice(mIdx, 1);
+          this.renderCustomStageCards();
+        });
+      });
+
+      this.dom.stageCardsContainer.appendChild(stageCard);
+    });
+  }
+
+  syncCustomBufferFromDOM() {
+    if (!this.dom.stageCardsContainer) return;
+    this.customStages.forEach((stage, sIdx) => {
+      stage.messages = [];
+      const msgItems = this.dom.stageCardsContainer.querySelectorAll(`.msg-card-item[data-sidx="${sIdx}"]`);
+      msgItems.forEach(item => {
+        const timeIn = item.querySelector('.msg-time-input');
+        const textIn = item.querySelector('.msg-text-input');
+        const timeVal = timeIn ? timeIn.value.trim() : "";
+        const textVal = textIn ? textIn.value.trim() : "";
+        stage.messages.push({ text: textVal, time_info: timeVal });
+      });
+    });
+  }
+
+  applyCustomStages() {
+    this.syncCustomBufferFromDOM();
+
+    for (let i = 0; i < this.customStages.length; i++) {
+      const msgs = this.customStages[i].messages;
+      if (!msgs || msgs.length === 0) {
+        this.showToast(`STAGE ${i + 1}에 최소 1개 이상의 메시지를 추가해주세요.`);
+        return;
+      }
+    }
+
+    this.saveStoredMessages(this.customStages);
+    this.closeModal();
+    this.showToast("커스텀 STAGE 메시지가 적용되었습니다.");
+  }
+
   saveSettingsFromModal() {
+    this.syncCustomBufferFromDOM();
+    const isAi = this.dom.toggleDirectiveMode ? this.dom.toggleDirectiveMode.checked : (this.config.directive_mode === 'ai');
+    
     const newConfig = {
-      orientation: this.dom.selectOrientation.value || 'landscape',
-      volume: parseInt(this.dom.sliderVolume.value, 10),
-      decode_speed: this.dom.selectDecodeSpeed.value,
-      sound_type: this.dom.selectSoundType.value,
-      font_color: this.config.font_color || '#2FBFFC',
-      bg_color: this.config.bg_color || '#000000',
-      scanlines: this.dom.toggleScanlines.checked,
-      vignette: this.dom.toggleVignette.checked,
+      directive_mode: isAi ? 'ai' : 'manual',
       gemini_api_key: this.dom.inputGeminiKey ? this.dom.inputGeminiKey.value.trim() : (this.config.gemini_api_key || ''),
       gemini_hint: this.dom.inputGeminiHint ? this.dom.inputGeminiHint.value.trim() : (this.config.gemini_hint || ''),
       gemini_model: this.dom.selectGeminiModel ? this.dom.selectGeminiModel.value : (this.config.gemini_model || 'gemini-2.5-flash'),
+      orientation: this.dom.selectOrientation.value,
+      ics_url: this.dom.inputIcsUrl.value.trim(),
+      auto_sync_min: parseInt(this.dom.selectAutoSync.value, 10),
+      decode_speed: this.dom.selectDecodeSpeed.value,
+      volume: parseInt(this.dom.sliderVolume.value, 10),
+      sound_type: this.dom.selectSoundType.value,
+      scanlines: this.dom.toggleScanlines.checked,
+      vignette: this.dom.toggleVignette.checked,
+      alarm_enabled: this.dom.toggleAlarm ? this.dom.toggleAlarm.checked : true,
     };
+
     this.saveConfig(newConfig);
-    this.showToast("환경 설정이 저장되었습니다.");
+    this.saveStoredMessages(this.customStages);
     this.closeModal();
+    this.showToast("설정이 저장되었습니다.");
   }
 
-  resetDefaults() {
+  resetToDefaults() {
     if (confirm("모든 설정을 기본값으로 초기화하시겠습니까?")) {
       this.saveConfig(DEFAULT_CONFIG);
+      this.saveStoredMessages(DEFAULT_MESSAGES);
       this.openModal();
       this.showToast("기본값으로 복원되었습니다.");
     }
   }
 
   // ── Gemini AI 실시간 지령 생성 ──
-  // 사용자가 화면을 터치할 때마다 호출되어, '프로젝트 문' 세계관 관리부 톤의
-  // 지령 한 줄을 실시간으로 생성한다(사전 작성/저장된 메시지를 쓰지 않음).
   buildGeminiSingleMessageRequestBody(hint) {
     const systemPrompt = [
       "너는 '프로젝트 문(Project Moon)' 세계관(로보토미 코퍼레이션, 라이브러리 오브 루이나, 림버스 컴퍼니)에 등장하는",
@@ -694,11 +1399,11 @@ class PagerApp {
       "",
       "규칙:",
       "- 이유는 알 수 없지만 절대적으로 순응해야 하는, 서늘하고 단호한 명령조로 쓴다. (예: '~할 것.', '~하라.')",
-      "- 지령 문구는 45자 이내로 한두 문장으로 간결하게 작성한다.",
+      "- 지령 문구는 30자 이내로 간결하게 작성한다.",
       "- 실존 캐릭터 이름이나 대사를 그대로 재현하지 말고, 분위기만 차용한 창작 지령을 만든다.",
       "- 매번 새롭고 다른, 다소 황당하더라도 그럴듯한 소재로 작성한다.",
       "- 반드시 한국어로만 작성한다.",
-      "- 다른 설명이나 따옴표, 인사말 없이 지령 문구 텍스트 하나만 출력한다."
+      "- 다른 설명이나 따옴표, 마크다운 없이 지령 텍스트 하나만 출력한다."
     ].join("\n");
 
     let userPrompt = "위 규칙에 맞는 지령을 하나 발급하라.";
@@ -711,12 +1416,11 @@ class PagerApp {
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       generationConfig: {
         temperature: 1.1,
-        maxOutputTokens: 250
+        maxOutputTokens: 150
       }
     };
   }
 
-  // API 키에 따라 사용 가능한 Gemini 모델 목록을 동적으로 가져와 셀렉트 박스에 반영한다.
   async fetchAvailableModels(apiKey) {
     if (!apiKey || apiKey.trim().length < 10) return;
     try {
@@ -760,7 +1464,7 @@ class PagerApp {
       const opt = document.createElement('option');
       opt.value = m;
       let label = m;
-      if (m === 'gemini-2.5-flash') label = `${m} (기본 / 초고속)`;
+      if (m === 'gemini-2.5-flash') label = `${m} (기본 / 권장)`;
       else if (m === 'gemini-2.0-flash') label = `${m} (고속 / 안정)`;
       else if (m === 'gemini-2.5-pro') label = `${m} (심층 추론)`;
       else if (m === 'gemini-1.5-flash') label = `${m} (레거시 플래시)`;
@@ -777,7 +1481,6 @@ class PagerApp {
     }
   }
 
-  // Gemini API를 직접 호출해서 지령 텍스트 한 줄을 반환한다. 실패 시 예외를 던진다.
   async generateGeminiMessage(hint) {
     const apiKey = (this.config.gemini_api_key || "").trim();
     if (!apiKey || apiKey.length < 10) {
@@ -796,7 +1499,7 @@ class PagerApp {
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "");
-      throw new Error(`Gemini API 오류 (HTTP ${resp.status}): ${errText.slice(0, 200)}`);
+      throw new Error(`Gemini API 오류 (HTTP ${resp.status}): ${errText.slice(0, 150)}`);
     }
 
     const data = await resp.json();
@@ -805,10 +1508,261 @@ class PagerApp {
       throw new Error("Gemini 응답에서 지령 내용을 찾을 수 없습니다.");
     }
 
-    const cleaned = rawText.trim().replace(/^["'\s]+|["'\s]+$/g, "");
-    return this.truncateText(cleaned, 60);
+    const cleaned = rawText.trim().replace(/^[\"\'\s]+|[\"\'\s]+$/g, "");
+    return this.truncateText(cleaned, 30);
   }
 
+  async testGeminiConnection() {
+    const apiKey = this.dom.inputGeminiKey ? this.dom.inputGeminiKey.value.trim() : (this.config.gemini_api_key || '');
+    if (!apiKey || apiKey.length < 10) {
+      if (this.dom.aiTestResult) {
+        this.dom.aiTestResult.textContent = "API 키를 먼저 입력하세요.";
+        this.dom.aiTestResult.className = "cyber-field-hint hint-error";
+      }
+      this.showToast("API 키를 입력하세요.");
+      return;
+    }
+
+    if (this.dom.btnTestGemini) {
+      this.dom.btnTestGemini.disabled = true;
+      this.dom.btnTestGemini.innerHTML = "<span>확인 중...</span>";
+    }
+    if (this.dom.aiTestResult) {
+      this.dom.aiTestResult.textContent = "Gemini API 연결 확인 중...";
+      this.dom.aiTestResult.className = "cyber-field-hint";
+    }
+
+    try {
+      this.config.gemini_api_key = apiKey;
+      this.saveConfig({ gemini_api_key: apiKey });
+      const testDirective = await this.generateGeminiMessage("테스트 지령");
+      
+      if (this.dom.aiTestResult) {
+        this.dom.aiTestResult.textContent = `연결 성공! [지령: ${testDirective}]`;
+        this.dom.aiTestResult.className = "cyber-field-hint hint-success";
+      }
+      if (this.dom.aiStatusIndicator) {
+        this.dom.aiStatusIndicator.textContent = "정상 연결됨";
+        this.dom.aiStatusIndicator.className = "status-badge-cyber active";
+      }
+      this.showToast("Gemini API 연결 성공!");
+      await this.fetchAvailableModels(apiKey);
+      this.updateModelSelectState();
+    } catch (err) {
+      if (this.dom.aiTestResult) {
+        this.dom.aiTestResult.textContent = `연결 실패: ${err.message}`;
+        this.dom.aiTestResult.className = "cyber-field-hint hint-error";
+      }
+      if (this.dom.aiStatusIndicator) {
+        this.dom.aiStatusIndicator.textContent = "연결 오류";
+        this.dom.aiStatusIndicator.className = "status-badge-cyber";
+      }
+      this.showToast(`연결 실패: ${err.message}`);
+    } finally {
+      if (this.dom.btnTestGemini) {
+        this.dom.btnTestGemini.disabled = false;
+        this.dom.btnTestGemini.innerHTML = "<span>연결 확인</span>";
+      }
+    }
+  }
+
+  // ── Google Calendar ICS 파싱 & 동기화 ──
+  async syncCalendar(icsUrl, isAuto = false) {
+    if (!icsUrl) return;
+
+    if (!isAuto && this.dom.btnSyncNow) {
+      this.dom.btnSyncNow.disabled = true;
+      this.dom.btnSyncNow.textContent = "동기화 중...";
+    }
+
+    try {
+      let icsText = null;
+
+      // 1. Android Native HTTP Bridge 시도
+      if (window.AndroidBridge && typeof window.AndroidBridge.fetchUrl === 'function') {
+        try {
+          const resp = window.AndroidBridge.fetchUrl(icsUrl);
+          if (resp && resp.startsWith('{')) {
+            const data = JSON.parse(resp);
+            if (data.status === 200 && data.data) {
+              icsText = data.data;
+            }
+          }
+        } catch (e) {}
+      }
+
+      // 2. 브라우저 직접 fetch 시도
+      if (!icsText) {
+        try {
+          const resp = await fetch(icsUrl);
+          if (resp.ok) icsText = await resp.text();
+        } catch (e) {}
+      }
+
+      // 3. CORS 프록시 폴백
+      if (!icsText) {
+        const proxies = [
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(icsUrl)}`,
+          `https://corsproxy.io/?${encodeURIComponent(icsUrl)}`
+        ];
+        for (const pUrl of proxies) {
+          try {
+            const resp = await fetch(pUrl);
+            if (resp.ok) {
+              icsText = await resp.text();
+              break;
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (!icsText) {
+        throw new Error("캘린더 데이터를 불러오지 못했습니다. 주소를 다시 확인해주세요.");
+      }
+
+      const events = this.parseICS(icsText);
+      if (events.length === 0) {
+        if (!isAuto) this.showToast("오늘 예정된 일정이 없습니다.");
+        return;
+      }
+
+      // 일정을 3개의 STAGE로 균등 분할
+      const stages = [
+        { stage: 1, messages: [] },
+        { stage: 2, messages: [] },
+        { stage: 3, messages: [] }
+      ];
+
+      events.forEach((evt, idx) => {
+        const stageIdx = idx % 3;
+        stages[stageIdx].messages.push({
+          text: this.truncateText(evt.summary, 30),
+          time_info: evt.timeStr || ""
+        });
+      });
+
+      const filteredStages = stages.filter(s => s.messages.length > 0);
+      this.saveStoredMessages(filteredStages);
+
+      if (!isAuto) {
+        this.showToast(`오늘 일정 ${events.length}개가 동기화되었습니다!`);
+        this.closeModal();
+      }
+    } catch (err) {
+      console.error(err);
+      if (!isAuto) this.showToast(err.message || "동기화 실패");
+    } finally {
+      if (!isAuto && this.dom.btnSyncNow) {
+        this.dom.btnSyncNow.disabled = false;
+        this.dom.btnSyncNow.textContent = "동기화";
+      }
+    }
+  }
+
+  // ── 한국 표준시(KST) 순수 오늘 일정 파싱 ──
+  parseICS(icsText) {
+    const events = [];
+    const lines = icsText.split(/\r\n|\n|\r/);
+    let inEvent = false;
+    let currentEvent = {};
+
+    const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const todayY = nowKST.getUTCFullYear();
+    const todayM = nowKST.getUTCMonth();
+    const todayD = nowKST.getUTCDate();
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      while (i + 1 < lines.length && (lines[i + 1].startsWith(" ") || lines[i + 1].startsWith("\t"))) {
+        line += lines[i + 1].slice(1);
+        i++;
+      }
+
+      if (line === "BEGIN:VEVENT") {
+        inEvent = true;
+        currentEvent = {};
+      } else if (line === "END:VEVENT") {
+        inEvent = false;
+        if (currentEvent.summary && currentEvent.dtstart) {
+          const evtDate = this.parseICSDate(currentEvent.dtstart);
+          if (evtDate) {
+            const evtKST = new Date(evtDate.getTime() + 9 * 60 * 60 * 1000);
+            if (
+              evtKST.getUTCFullYear() === todayY &&
+              evtKST.getUTCMonth() === todayM &&
+              evtKST.getUTCDate() === todayD
+            ) {
+              let timeStr = "";
+              if (!currentEvent.isAllDay) {
+                const h = String(evtKST.getUTCHours()).padStart(2, '0');
+                const m = String(evtKST.getUTCMinutes()).padStart(2, '0');
+                timeStr = `${h}:${m}`;
+                if (currentEvent.dtend) {
+                  const endDate = this.parseICSDate(currentEvent.dtend);
+                  if (endDate) {
+                    const endKST = new Date(endDate.getTime() + 9 * 60 * 60 * 1000);
+                    const eh = String(endKST.getUTCHours()).padStart(2, '0');
+                    const em = String(endKST.getUTCMinutes()).padStart(2, '0');
+                    timeStr += ` - ${eh}:${em}`;
+                  }
+                }
+              } else {
+                timeStr = "종일 일정";
+              }
+
+              events.push({
+                summary: currentEvent.summary,
+                timeStr: timeStr,
+                timestamp: evtDate.getTime()
+              });
+            }
+          }
+        }
+      } else if (inEvent) {
+        if (line.startsWith("SUMMARY:")) {
+          currentEvent.summary = line.slice(8).replace(/\\,/g, ",").replace(/\\;/g, ";");
+        } else if (line.startsWith("DTSTART")) {
+          const val = line.split(":")[1];
+          currentEvent.dtstart = val;
+          if (line.includes("VALUE=DATE") || (val && val.length === 8)) {
+            currentEvent.isAllDay = true;
+          }
+        } else if (line.startsWith("DTEND")) {
+          currentEvent.dtend = line.split(":")[1];
+        }
+      }
+    }
+
+    events.sort((a, b) => a.timestamp - b.timestamp);
+    return events;
+  }
+
+  parseICSDate(dateStr) {
+    if (!dateStr) return null;
+    try {
+      if (dateStr.length === 8) {
+        const y = parseInt(dateStr.slice(0, 4), 10);
+        const m = parseInt(dateStr.slice(4, 6), 10) - 1;
+        const d = parseInt(dateStr.slice(6, 8), 10);
+        return new Date(Date.UTC(y, m, d, 0, 0, 0));
+      }
+      const cleaned = dateStr.replace(/[^0-9TZ]/g, '');
+      const y = parseInt(cleaned.slice(0, 4), 10);
+      const m = parseInt(cleaned.slice(4, 6), 10) - 1;
+      const d = parseInt(cleaned.slice(6, 8), 10);
+      const h = parseInt(cleaned.slice(9, 11) || 0, 10);
+      const min = parseInt(cleaned.slice(11, 13) || 0, 10);
+      const s = parseInt(cleaned.slice(13, 15) || 0, 10);
+
+      if (cleaned.endsWith('Z')) {
+        return new Date(Date.UTC(y, m, d, h, min, s));
+      } else {
+        return new Date(y, m, d, h, min, s);
+      }
+    } catch {
+      return null;
+    }
+  }
 
   // ── 프리미엄 사이버 컬러 피커 시스템 ──
   initCustomColorPicker() {
@@ -818,7 +1772,6 @@ class PagerApp {
     this.currentColorV = 99;
     this.currentColorHex = '#2FBFFC';
 
-    // 1. 2D 채도/명도 캔버스 인터랙션
     let isDraggingSV = false;
     const handleSVMove = (e) => {
       if (!this.dom.pickerSvBox) return;
@@ -829,30 +1782,21 @@ class PagerApp {
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
       const s = Math.round(x * 100);
       const v = Math.round((1 - y) * 100);
+
       this.updateColorFromHSV(this.currentColorH, s, v);
     };
 
     if (this.dom.pickerSvBox) {
-      this.dom.pickerSvBox.addEventListener('pointerdown', (e) => {
+      this.dom.pickerSvBox.addEventListener('mousedown', (e) => {
         isDraggingSV = true;
-        this.dom.pickerSvBox.setPointerCapture(e.pointerId);
         handleSVMove(e);
       });
-      this.dom.pickerSvBox.addEventListener('pointermove', (e) => {
-        if (isDraggingSV) handleSVMove(e);
-      });
-      this.dom.pickerSvBox.addEventListener('pointerup', (e) => {
-        if (isDraggingSV) {
-          isDraggingSV = false;
-          try { this.dom.pickerSvBox.releasePointerCapture(e.pointerId); } catch(err) {}
-        }
-      });
-      this.dom.pickerSvBox.addEventListener('pointercancel', () => {
-        isDraggingSV = false;
-      });
+      this.dom.pickerSvBox.addEventListener('touchstart', (e) => {
+        isDraggingSV = true;
+        handleSVMove(e);
+      }, { passive: true });
     }
 
-    // 2. 1D HUE 바 인터랙션
     let isDraggingHue = false;
     const handleHueMove = (e) => {
       if (!this.dom.pickerHueTrack) return;
@@ -860,30 +1804,39 @@ class PagerApp {
       const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const h = Math.round(x * 360) % 360;
+
       this.updateColorFromHSV(h, this.currentColorS, this.currentColorV);
     };
 
     if (this.dom.pickerHueTrack) {
-      this.dom.pickerHueTrack.addEventListener('pointerdown', (e) => {
+      this.dom.pickerHueTrack.addEventListener('mousedown', (e) => {
         isDraggingHue = true;
-        this.dom.pickerHueTrack.setPointerCapture(e.pointerId);
         handleHueMove(e);
       });
-      this.dom.pickerHueTrack.addEventListener('pointermove', (e) => {
-        if (isDraggingHue) handleHueMove(e);
-      });
-      this.dom.pickerHueTrack.addEventListener('pointerup', (e) => {
-        if (isDraggingHue) {
-          isDraggingHue = false;
-          try { this.dom.pickerHueTrack.releasePointerCapture(e.pointerId); } catch(err) {}
-        }
-      });
-      this.dom.pickerHueTrack.addEventListener('pointercancel', () => {
-        isDraggingHue = false;
-      });
+      this.dom.pickerHueTrack.addEventListener('touchstart', (e) => {
+        isDraggingHue = true;
+        handleHueMove(e);
+      }, { passive: true });
     }
 
-    // 3. HEX 텍스트 인풋
+    window.addEventListener('mousemove', (e) => {
+      if (isDraggingSV) handleSVMove(e);
+      if (isDraggingHue) handleHueMove(e);
+    });
+    window.addEventListener('touchmove', (e) => {
+      if (isDraggingSV) handleSVMove(e);
+      if (isDraggingHue) handleHueMove(e);
+    }, { passive: true });
+
+    window.addEventListener('mouseup', () => {
+      isDraggingSV = false;
+      isDraggingHue = false;
+    });
+    window.addEventListener('touchend', () => {
+      isDraggingSV = false;
+      isDraggingHue = false;
+    });
+
     if (this.dom.pickerHexInput) {
       this.dom.pickerHexInput.addEventListener('input', (e) => {
         let val = e.target.value.trim();
@@ -894,172 +1847,200 @@ class PagerApp {
       });
     }
 
-    // 4. RGB 숫자 인풋
-    const handleRgbChange = () => {
-      const r = parseInt(this.dom.pickerRInput.value, 10) || 0;
-      const g = parseInt(this.dom.pickerGInput.value, 10) || 0;
-      const b = parseInt(this.dom.pickerBInput.value, 10) || 0;
-      this.updateColorFromRgb(r, g, b);
+    const handleRGBInput = () => {
+      const r = Math.min(255, Math.max(0, parseInt(this.dom.pickerRInput.value || 0, 10)));
+      const g = Math.min(255, Math.max(0, parseInt(this.dom.pickerGInput.value || 0, 10)));
+      const b = Math.min(255, Math.max(0, parseInt(this.dom.pickerBInput.value || 0, 10)));
+      const hex = this.rgbToHex(r, g, b);
+      this.updateColorFromHex(hex);
     };
 
-    if (this.dom.pickerRInput) this.dom.pickerRInput.addEventListener('input', handleRgbChange);
-    if (this.dom.pickerGInput) this.dom.pickerGInput.addEventListener('input', handleRgbChange);
-    if (this.dom.pickerBInput) this.dom.pickerBInput.addEventListener('input', handleRgbChange);
+    if (this.dom.pickerRInput) this.dom.pickerRInput.addEventListener('input', handleRGBInput);
+    if (this.dom.pickerGInput) this.dom.pickerGInput.addEventListener('input', handleRGBInput);
+    if (this.dom.pickerBInput) this.dom.pickerBInput.addEventListener('input', handleRGBInput);
 
-    // 5. 모달 버튼 액션
+    if (this.dom.btnOpenColorPickerFont) {
+      this.dom.btnOpenColorPickerFont.addEventListener('click', () => {
+        this.openColorModal('font');
+      });
+    }
+    if (this.dom.btnOpenColorPickerBg) {
+      this.dom.btnOpenColorPickerBg.addEventListener('click', () => {
+        this.openColorModal('bg');
+      });
+    }
+
     if (this.dom.btnCloseColorModal) {
-      this.dom.btnCloseColorModal.addEventListener('click', () => this.closeCustomColorModal());
+      this.dom.btnCloseColorModal.addEventListener('click', () => this.closeColorModal());
     }
     if (this.dom.btnCancelColorModal) {
-      this.dom.btnCancelColorModal.addEventListener('click', () => this.closeCustomColorModal());
+      this.dom.btnCancelColorModal.addEventListener('click', () => this.closeColorModal());
     }
     if (this.dom.btnApplyColorModal) {
-      this.dom.btnApplyColorModal.addEventListener('click', () => this.applyChosenCustomColor());
-    }
-    if (this.dom.colorModal) {
-      this.dom.colorModal.addEventListener('click', (e) => {
-        if (e.target === this.dom.colorModal) this.closeCustomColorModal();
-      });
+      this.dom.btnApplyColorModal.addEventListener('click', () => this.applySelectedCustomColor());
     }
   }
 
-  openCustomColorModal(target = 'font') {
+  openColorModal(target) {
     this.colorPickerTarget = target;
+    const initialHex = (target === 'font') ? (this.config.font_color || '#2FBFFC') : (this.config.bg_color || '#000000');
+    
     if (this.dom.colorModalTitle) {
-      this.dom.colorModalTitle.textContent = target === 'font' ? '🎨 글자 색상 사용자 지정' : '🎨 배경 색상 사용자 지정';
+      this.dom.colorModalTitle.textContent = (target === 'font') ? '🎨 글자 색상 직접 선택' : '🎨 배경 색상 직접 선택';
     }
 
-    const currentHex = target === 'font' ? (this.config.font_color || '#2FBFFC') : (this.config.bg_color || '#000000');
-    this.updateColorFromHex(currentHex);
-    this.renderQuickPresets();
+    this.renderQuickPresets(target);
+    this.updateColorFromHex(initialHex);
 
     if (this.dom.colorModal) this.dom.colorModal.classList.remove('hidden');
   }
 
-  closeCustomColorModal() {
+  closeColorModal() {
     if (this.dom.colorModal) this.dom.colorModal.classList.add('hidden');
   }
 
-  updateColorFromHSV(h, s, v) {
-    this.currentColorH = Math.max(0, Math.min(360, h));
-    this.currentColorS = Math.max(0, Math.min(100, s));
-    this.currentColorV = Math.max(0, Math.min(100, v));
+  applySelectedCustomColor() {
+    const selectedHex = this.currentColorHex.toUpperCase();
+    if (this.colorPickerTarget === 'font') {
+      this.config.font_color = selectedHex;
+      this.applyCustomColors(selectedHex, this.config.bg_color);
+      this.saveConfig({ font_color: selectedHex });
+      this.showToast(`글자 색상 적용됨: ${selectedHex}`);
+    } else {
+      this.config.bg_color = selectedHex;
+      this.applyCustomColors(this.config.font_color, selectedHex);
+      this.saveConfig({ bg_color: selectedHex });
+      this.showToast(`배경 색상 적용됨: ${selectedHex}`);
+    }
+    this.closeColorModal();
+  }
 
-    const rgb = this.hsvToRgb(this.currentColorH, this.currentColorS, this.currentColorV);
+  updateColorFromHSV(h, s, v) {
+    this.currentColorH = h;
+    this.currentColorS = s;
+    this.currentColorV = v;
+
+    const rgb = this.hsvToRgb(h, s, v);
     const hex = this.rgbToHex(rgb.r, rgb.g, rgb.b);
     this.currentColorHex = hex;
 
-    // 1. SV 박스 틴트 & 커서 위치
-    if (this.dom.pickerSvBox) {
-      this.dom.pickerSvBox.style.backgroundColor = `hsl(${this.currentColorH}, 100%, 50%)`;
-    }
-    if (this.dom.pickerSvCursor) {
-      this.dom.pickerSvCursor.style.left = `${this.currentColorS}%`;
-      this.dom.pickerSvCursor.style.top = `${100 - this.currentColorV}%`;
-    }
-
-    // 2. Hue 썸 위치
-    if (this.dom.pickerHueThumb) {
-      this.dom.pickerHueThumb.style.left = `${(this.currentColorH / 360) * 100}%`;
-    }
-
-    // 3. 라이브 스와치 & 발광
-    if (this.dom.pickerLiveSwatch) {
-      this.dom.pickerLiveSwatch.style.backgroundColor = hex;
-      this.dom.pickerLiveSwatch.style.borderColor = hex;
-      this.dom.pickerLiveSwatch.style.boxShadow = `0 0 14px ${hex}99`;
-    }
-
-    // 4. 인풋 필드 동기화 (포커스 중이 아닐 때만)
-    if (this.dom.pickerHexInput && document.activeElement !== this.dom.pickerHexInput) {
-      this.dom.pickerHexInput.value = hex;
-    }
-    if (this.dom.pickerRInput && document.activeElement !== this.dom.pickerRInput) this.dom.pickerRInput.value = rgb.r;
-    if (this.dom.pickerGInput && document.activeElement !== this.dom.pickerGInput) this.dom.pickerGInput.value = rgb.g;
-    if (this.dom.pickerBInput && document.activeElement !== this.dom.pickerBInput) this.dom.pickerBInput.value = rgb.b;
-
-    // 5. 퀵 프리셋 칩 활성화 표시
-    document.querySelectorAll('.quick-preset-chip').forEach(chip => {
-      chip.classList.toggle('active', chip.dataset.color.toUpperCase() === hex);
-    });
+    this.updateColorPickerUI(h, s, v, rgb, hex);
   }
 
   updateColorFromHex(hex) {
     const rgb = this.hexToRgb(hex);
     if (!rgb) return;
     const hsv = this.rgbToHsv(rgb.r, rgb.g, rgb.b);
-    this.updateColorFromHSV(hsv.h, hsv.s, hsv.v);
+
+    this.currentColorH = hsv.h;
+    this.currentColorS = hsv.s;
+    this.currentColorV = hsv.v;
+    this.currentColorHex = hex.toUpperCase();
+
+    this.updateColorPickerUI(hsv.h, hsv.s, hsv.v, rgb, hex);
   }
 
-  updateColorFromRgb(r, g, b) {
-    const hsv = this.rgbToHsv(r, g, b);
-    this.updateColorFromHSV(hsv.h, hsv.s, hsv.v);
+  updateColorPickerUI(h, s, v, rgb, hex) {
+    if (this.dom.pickerSvBox) {
+      this.dom.pickerSvBox.style.backgroundColor = `hsl(${h}, 100%, 50%)`;
+    }
+    if (this.dom.pickerSvCursor) {
+      this.dom.pickerSvCursor.style.left = `${s}%`;
+      this.dom.pickerSvCursor.style.top = `${100 - v}%`;
+      this.dom.pickerSvCursor.style.backgroundColor = hex;
+    }
+    if (this.dom.pickerHueThumb) {
+      this.dom.pickerHueThumb.style.left = `${(h / 360) * 100}%`;
+    }
+    if (this.dom.pickerLiveSwatch) {
+      this.dom.pickerLiveSwatch.style.backgroundColor = hex;
+    }
+    if (this.dom.pickerHexInput && document.activeElement !== this.dom.pickerHexInput) {
+      this.dom.pickerHexInput.value = hex.toUpperCase();
+    }
+    if (this.dom.pickerRInput && document.activeElement !== this.dom.pickerRInput) {
+      this.dom.pickerRInput.value = rgb.r;
+    }
+    if (this.dom.pickerGInput && document.activeElement !== this.dom.pickerGInput) {
+      this.dom.pickerGInput.value = rgb.g;
+    }
+    if (this.dom.pickerBInput && document.activeElement !== this.dom.pickerBInput) {
+      this.dom.pickerBInput.value = rgb.b;
+    }
+
+    if (this.dom.quickPresetGrid) {
+      this.dom.quickPresetGrid.querySelectorAll('.quick-preset-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.color.toUpperCase() === hex);
+      });
+    }
   }
 
-  renderQuickPresets() {
+  renderQuickPresets(target) {
     if (!this.dom.quickPresetGrid) return;
     this.dom.quickPresetGrid.innerHTML = '';
 
-    const presets = [
-      "#2FBFFC", "#00E5FF", "#38C5FF", "#5CD0FF",
-      "#00E676", "#69F0AE", "#B2FF59", "#76FF03",
-      "#FF9D00", "#FFC107", "#FFD600", "#FFAB00",
-      "#FF5252", "#FF1744", "#F50057", "#D500F9",
-      "#7C4DFF", "#651FFF", "#3D5AFE", "#2979FF",
-      "#FFFFFF", "#B0BEC5", "#050E18", "#000000"
+    const fontPresets = [
+      { name: '단테 블루', hex: '#2FBFFC' },
+      { name: '황금가지', hex: '#FF9D00' },
+      { name: '레트로 그린', hex: '#00E676' },
+      { name: '네온 레드', hex: '#FF5252' },
+      { name: '사이버 핑크', hex: '#FF4081' },
+      { name: '바이올렛', hex: '#D500F9' },
+      { name: '터콰이즈', hex: '#00E5FF' },
+      { name: '화이트', hex: '#FFFFFF' }
     ];
 
-    presets.forEach(color => {
+    const bgPresets = [
+      { name: '딥 블랙', hex: '#000000' },
+      { name: '다크 네이비', hex: '#050E18' },
+      { name: '다크 퍼플', hex: '#0B0412' },
+      { name: '다크 올리브', hex: '#09140A' },
+      { name: '다크 카민', hex: '#140508' },
+      { name: '나이트 블루', hex: '#020B14' },
+      { name: '옵시디언', hex: '#080808' },
+      { name: '차콜', hex: '#101214' }
+    ];
+
+    const presets = (target === 'font') ? fontPresets : bgPresets;
+    presets.forEach(p => {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'quick-preset-chip';
-      chip.dataset.color = color;
-      chip.style.backgroundColor = color;
-      chip.style.color = color;
-      chip.title = color;
-      if (color.toUpperCase() === this.currentColorHex) {
+      chip.dataset.color = p.hex;
+      chip.innerHTML = `
+        <span class="preset-color-dot" style="background:${p.hex};"></span>
+        <span class="preset-name">${p.name}</span>
+      `;
+      if (p.hex.toUpperCase() === this.currentColorHex) {
         chip.classList.add('active');
       }
       chip.addEventListener('click', () => {
-        this.updateColorFromHex(color);
+        this.updateColorFromHex(p.hex);
       });
       this.dom.quickPresetGrid.appendChild(chip);
     });
   }
 
-  applyChosenCustomColor() {
-    const chosen = this.currentColorHex;
-    if (this.colorPickerTarget === 'font') {
-      this.config.font_color = chosen;
-      this.applyCustomColors(chosen, this.config.bg_color || '#000000');
-      this.saveConfig({ font_color: chosen });
-    } else {
-      this.config.bg_color = chosen;
-      this.applyCustomColors(this.config.font_color || '#2FBFFC', chosen);
-      this.saveConfig({ bg_color: chosen });
-    }
-    this.closeCustomColorModal();
-    this.showToast(`색상이 적용 및 저장되었습니다: ${chosen}`);
-  }
-
   // ── 색상 변환 헬퍼 함수 ──
   hsvToRgb(h, s, v) {
-    s /= 100;
-    v /= 100;
+    s = s / 100;
+    v = v / 100;
     const c = v * s;
-    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
     const m = v - c;
-    let r = 0, g = 0, b = 0;
-    if (h >= 0 && h < 60) { r = c; g = x; b = 0; }
-    else if (h >= 60 && h < 120) { r = x; g = c; b = 0; }
-    else if (h >= 120 && h < 180) { r = 0; g = c; b = x; }
-    else if (h >= 180 && h < 240) { r = 0; g = x; b = c; }
-    else if (h >= 240 && h < 300) { r = x; g = 0; b = c; }
-    else if (h >= 300 && h < 360) { r = c; g = 0; b = x; }
+    let r1 = 0, g1 = 0, b1 = 0;
+
+    if (h >= 0 && h < 60) { r1 = c; g1 = x; b1 = 0; }
+    else if (h >= 60 && h < 120) { r1 = x; g1 = c; b1 = 0; }
+    else if (h >= 120 && h < 180) { r1 = 0; g1 = c; b1 = x; }
+    else if (h >= 180 && h < 240) { r1 = 0; g1 = x; b1 = c; }
+    else if (h >= 240 && h < 300) { r1 = x; g1 = 0; b1 = c; }
+    else if (h >= 300 && h < 360) { r1 = c; g1 = 0; b1 = x; }
+
     return {
-      r: Math.round((r + m) * 255),
-      g: Math.round((g + m) * 255),
-      b: Math.round((b + m) * 255)
+      r: Math.round((r1 + m) * 255),
+      g: Math.round((g1 + m) * 255),
+      b: Math.round((b1 + m) * 255)
     };
   }
 
@@ -1067,46 +2048,51 @@ class PagerApp {
     r /= 255; g /= 255; b /= 255;
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
     const d = max - min;
-    let h = 0, s = max === 0 ? 0 : d / max, v = max;
-    if (max !== min) {
+    let h = 0;
+    const s = (max === 0) ? 0 : (d / max) * 100;
+    const v = max * 100;
+
+    if (d !== 0) {
       switch (max) {
-        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-        case g: h = (b - r) / d + 2; break;
-        case b: h = (r - g) / d + 4; break;
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) * 60; break;
+        case g: h = ((b - r) / d + 2) * 60; break;
+        case b: h = ((r - g) / d + 4) * 60; break;
       }
-      h *= 60;
     }
-    return { h: Math.round(h), s: Math.round(s * 100), v: Math.round(v * 100) };
+    return { h: Math.round(h), s: Math.round(s), v: Math.round(v) };
   }
 
   rgbToHex(r, g, b) {
     const toHex = (n) => {
-      const hex = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+      const hex = Math.max(0, Math.min(255, n)).toString(16);
       return hex.length === 1 ? '0' + hex : hex;
     };
-    return ('#' + toHex(r) + toHex(g) + toHex(b)).toUpperCase();
+    return (`#${toHex(r)}${toHex(g)}${toHex(b)}`).toUpperCase();
   }
 
   hexToRgb(hex) {
-    let c = hex.replace('#', '');
-    if (c.length === 3) c = c.split('').map(x => x + x).join('');
-    if (c.length !== 6) return null;
-    const num = parseInt(c, 16);
-    if (isNaN(num)) return null;
-    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+    const m = hex.replace('#', '').match(/.{1,2}/g);
+    if (!m || m.length < 3) return null;
+    return {
+      r: parseInt(m[0], 16),
+      g: parseInt(m[1], 16),
+      b: parseInt(m[2], 16)
+    };
   }
 
   // ── 토스트 알림 ──
   showToast(msg) {
+    if (!this.dom.toast) return;
     this.dom.toast.textContent = msg;
     this.dom.toast.classList.remove('hidden');
-    setTimeout(() => {
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
       this.dom.toast.classList.add('hidden');
-    }, 2800);
+    }, 2500);
   }
 }
 
-// 앱 실행
-document.addEventListener('DOMContentLoaded', () => {
-  window.pagerApp = new PagerApp();
+// ── 앱 초기화 ──
+window.addEventListener('DOMContentLoaded', () => {
+  window.limbusApp = new PagerApp();
 });

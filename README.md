@@ -10,7 +10,8 @@
 
 스마트폰에 설치하여 바로 사용하실 수 있는 **6.2MB 초경량 네이티브 앱**입니다.
 
-* **[최신 APK 다운로드 (v2.1.2)](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.1.2/LimbusBeep-v2.1.2.apk)**
+* **[최신 프리뷰 APK 다운로드 (v2.2.0-preview)](https://github.com/Ice-Moca/limbus_beep_app/releases/download/v2.2.0-preview/LimbusBeep-v2.2.0-preview.apk)**
+* **[최신 정식 릴리즈 (v2.1.1)](https://github.com/Ice-Moca/limbus_beep_app/releases/tag/v2.1.1)**
 * **[항상 최신 APK 링크](https://github.com/Ice-Moca/limbus_beep_app/releases/latest/download/LimbusBeep-latest.apk)**
 
 ---
@@ -23,10 +24,16 @@
    - 비프음 재생 및 점진적 텍스트 복호화(Decryption) 연출
    - 지령 수신 중 비프 애니메이션 연출
 
-2. **Gemini API 실시간 지령 생성**:
-   - 본인 Gemini API 키 입력 시 화면 터치마다 프로젝트 문 세계관의 지령 실시간 발급
-   - `gemini-2.5-flash` 기본 적용 및 실시간 사용 가능 모델 목록 동적 탐색/선택 지원
-   - 상황 힌트(예: 야근 중, 위기 대응 등) 반영 지원
+2. **지령 발급 모드 선택 (AI 실시간 생성 vs 수동/캘린더 연동)**:
+   - **AI 실시간 지령 생성 (Gemini)**:
+     - 본인 Gemini API 키 입력 시 화면 터치마다 프로젝트 문 세계관의 지령 실시간 발급
+     - API 키 입력/확인 후 모델 선택 드롭다운 활성화 (`gemini-2.5-flash` 기본) 및 동적 모델 탐색
+     - 비밀번호 숨김/보기 토글 및 원클릭 연결 확인 지원
+     - 상황 힌트(예: 야근 중, 위기 대응 등) 반영 지원
+   - **수동 입력 및 캘린더 연동**:
+     - STAGE 1~3 단계별 일정 메시지 카드 자유 추가/수정/삭제
+     - Google 캘린더 iCal 비공개 주소 1초 연동 및 3단계 자동 분할
+     - 일정에 등록된 시간(예: `09:00`) 자동 비프 알람 및 상단 배너 알림
 
 3. **자유로운 화면 & 색상 커스텀**:
    - **화면 방향**: 가로 모드(기본), 세로 모드, 자동 회전

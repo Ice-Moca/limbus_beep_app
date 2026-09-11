@@ -860,7 +860,7 @@ html, body {
 }
 
 /* 폼 입력창 */
-input[type="text"], textarea, .cyber-select {
+input[type="text"], input[type="password"], textarea, .cyber-select, .cyber-input {
   background: #03060a;
   border: 1px solid #162b3d;
   color: #ffffff;
@@ -872,17 +872,154 @@ input[type="text"], textarea, .cyber-select {
   outline: none;
   width: 100%;
   transition: all 0.2s ease;
+  box-sizing: border-box;
 }
 
-input[type="text"]:focus, textarea:focus, .cyber-select:focus {
+input[type="text"]:focus, input[type="password"]:focus, textarea:focus, .cyber-select:focus, .cyber-input:focus {
   border-color: var(--cyan-primary);
   box-shadow: 0 0 10px var(--cyan-glow);
   background: #040910;
 }
 
+input:disabled, textarea:disabled, .cyber-select:disabled, .cyber-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: #101c27 !important;
+  background: #020407 !important;
+  color: #546e7a !important;
+  box-shadow: none !important;
+}
+
 .input-with-btn {
   display: flex;
   gap: 8px;
+}
+
+/* 사이버 폼 필드 그룹 및 컴포넌트 */
+.cyber-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: bold;
+  color: #b0bec5;
+  letter-spacing: 0.5px;
+}
+
+.field-help-link {
+  font-size: 11px;
+  color: var(--cyan-primary);
+  text-decoration: none;
+  font-family: var(--font-main);
+  transition: color 0.2s ease;
+}
+
+.field-help-link:hover {
+  color: #80d8ff;
+  text-decoration: underline;
+}
+
+.field-optional-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+/* 인풋 래퍼 및 액션 버튼들 */
+.cyber-input-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.cyber-input-wrap .cyber-input,
+.cyber-input-wrap input[type="password"],
+.cyber-input-wrap input[type="text"] {
+  flex: 1;
+}
+
+.cyber-input-action-btn {
+  background: #071320;
+  border: 1px solid #162b3d;
+  color: #90a4ae;
+  border-radius: 6px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  user-select: none;
+  font-family: var(--font-main);
+}
+
+.cyber-input-action-btn:hover {
+  background: #0c1d2e;
+  color: #ffffff;
+  border-color: var(--cyan-primary);
+}
+
+.cyber-field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.cyber-field-hint.hint-success {
+  color: #00e676;
+}
+
+.cyber-field-hint.hint-error {
+  color: #ff5252;
+}
+
+/* 모드 상태 뱃지 */
+.mode-state-pill {
+  font-size: 11px;
+  font-weight: bold;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.mode-state-pill.pill-ai {
+  color: var(--cyan-primary);
+  background: rgba(47, 191, 252, 0.12);
+  border: 1px solid rgba(47, 191, 252, 0.35);
+}
+
+.mode-state-pill.pill-manual {
+  color: var(--amber-accent);
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 152, 0, 0.35);
+}
+
+.status-badge-cyber {
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #90a4ae;
+  background: #0a1520;
+  border: 1px solid #162b3d;
+}
+
+.status-badge-cyber.active {
+  color: #00e676;
+  border-color: rgba(0, 230, 118, 0.4);
+  background: rgba(0, 230, 118, 0.1);
 }
 
 /* 탭 2: STAGE 동적 관리 스타일 */
